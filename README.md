@@ -27,11 +27,13 @@ npm install -g ccusage
 
 ## 설치
 
-### Homebrew (예정)
+### Homebrew
 
 ```bash
 brew install --cask chattymin/tap/token-mac
 ```
+
+ad-hoc/자체 서명 앱이라 Cask 설치 시 격리 속성을 자동 제거한다(postflight `xattr -cr`).
 
 ### 소스 빌드
 
