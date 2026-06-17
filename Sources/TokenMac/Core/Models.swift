@@ -19,7 +19,8 @@ struct DailyUsage: Decodable, Sendable {
         inputTokens = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
         outputTokens = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
         cacheCreationTokens = try c.decodeIfPresent(Int.self, forKey: .cacheCreationTokens) ?? 0
-        cacheReadTokens = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens) ?? 0
+        cacheReadTokens = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens)
+            ?? c.decodeIfPresent(Int.self, forKey: .cachedInputTokens) ?? 0
         // totalTokens 없으면 4종 토큰 합으로 폴백
         totalTokens = try c.decodeIfPresent(Int.self, forKey: .totalTokens)
             ?? (inputTokens + outputTokens + cacheCreationTokens + cacheReadTokens)
@@ -40,7 +41,7 @@ struct DailyUsage: Decodable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case date, period, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens
-        case totalTokens, totalCost, costUSD
+        case cachedInputTokens, totalTokens, totalCost, costUSD
     }
 }
 
@@ -118,10 +119,12 @@ struct PeriodUsage: Decodable, Sendable {
         let input = try c.decodeIfPresent(Int.self, forKey: .inputTokens) ?? 0
         let output = try c.decodeIfPresent(Int.self, forKey: .outputTokens) ?? 0
         let cacheW = try c.decodeIfPresent(Int.self, forKey: .cacheCreationTokens) ?? 0
-        let cacheR = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens) ?? 0
+        let cacheR = try c.decodeIfPresent(Int.self, forKey: .cacheReadTokens)
+            ?? c.decodeIfPresent(Int.self, forKey: .cachedInputTokens) ?? 0
         totalTokens = try c.decodeIfPresent(Int.self, forKey: .totalTokens)
             ?? (input + output + cacheW + cacheR)
-        totalCost = try c.decodeIfPresent(Double.self, forKey: .totalCost) ?? 0
+        totalCost = try c.decodeIfPresent(Double.self, forKey: .totalCost)
+            ?? c.decodeIfPresent(Double.self, forKey: .costUSD) ?? 0
     }
 
     init(period: String, totalTokens: Int, totalCost: Double) {
@@ -130,9 +133,15 @@ struct PeriodUsage: Decodable, Sendable {
         self.totalCost = totalCost
     }
 
+    init(period: String, daily: [DailyUsage]) {
+        self.period = period
+        totalTokens = daily.reduce(0) { $0 + $1.totalTokens }
+        totalCost = daily.reduce(0) { $0 + $1.totalCost }
+    }
+
     private enum CodingKeys: String, CodingKey {
         case week, month, period, inputTokens, outputTokens, cacheCreationTokens, cacheReadTokens
-        case totalTokens, totalCost
+        case cachedInputTokens, totalTokens, totalCost, costUSD
     }
 }
 
@@ -183,6 +192,71 @@ struct LimitStatus: Decodable, Sendable {
         case sevenDayOpus = "seven_day_opus"
         case sevenDaySonnet = "seven_day_sonnet"
     }
+}
+
+// MARK: - Codex app-server rate limits
+
+struct CodexRateLimitWindow: Decodable, Sendable {
+    var usedPercent: Int
+    var windowDurationMins: Int?
+    var resetsAt: Int?
+
+    var resetDate: Date? {
+        guard let resetsAt else { return nil }
+        return Date(timeIntervalSince1970: TimeInterval(resetsAt))
+    }
+
+    var displayName: String {
+        switch windowDurationMins {
+        case 300: return "5시간 세션"
+        case 10_080: return "주간"
+        case let mins? where mins >= 60 && mins % 60 == 0: return "\(mins / 60)시간"
+        case let mins?: return "\(mins)분"
+        case nil: return "한도"
+        }
+    }
+}
+
+struct CodexCreditsSnapshot: Decodable, Sendable {
+    var balance: String?
+    var hasCredits: Bool
+    var unlimited: Bool
+}
+
+struct CodexSpendControlLimit: Decodable, Sendable {
+    var limit: String
+    var remainingPercent: Int
+    var resetsAt: Int
+    var used: String
+
+    var usedPercent: Int { max(0, min(100, 100 - remainingPercent)) }
+    var resetDate: Date { Date(timeIntervalSince1970: TimeInterval(resetsAt)) }
+}
+
+struct CodexRateLimitSnapshot: Decodable, Sendable {
+    var limitId: String?
+    var limitName: String?
+    var primary: CodexRateLimitWindow?
+    var secondary: CodexRateLimitWindow?
+    var credits: CodexCreditsSnapshot?
+    var individualLimit: CodexSpendControlLimit?
+    var planType: String?
+    var rateLimitReachedType: String?
+
+    var hasVisibleLimit: Bool {
+        primary != nil || secondary != nil || individualLimit != nil
+    }
+}
+
+struct CodexRateLimitStatus: Decodable, Sendable {
+    var rateLimits: CodexRateLimitSnapshot
+    var rateLimitsByLimitId: [String: CodexRateLimitSnapshot]?
+
+    var codex: CodexRateLimitSnapshot {
+        rateLimitsByLimitId?["codex"] ?? rateLimits
+    }
+
+    var hasVisibleLimit: Bool { codex.hasVisibleLimit }
 }
 
 // MARK: - Provider snapshot

@@ -32,7 +32,7 @@ struct SettingsView: View {
                     .font(.callout)
                 Toggle("오늘 토큰", isOn: $store.showTokensInMenu)
                 Toggle("오늘 비용 ($)", isOn: $store.showCostInMenu)
-                Toggle("5시간 한도 %", isOn: $store.showLimitInMenu)
+                Toggle("한도 %", isOn: $store.showLimitInMenu)
                 Text("전부 끄면 코인 아이콘만 표시됩니다")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -40,9 +40,31 @@ struct SettingsView: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Toggle("Keychain 접근 끄기", isOn: $store.disableKeychainAccess)
-                Text("켜면 공식 한도 % 조회를 건너뜁니다")
+                Text("켜면 Claude Keychain 한도 조회만 건너뜁니다")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                HStack(spacing: 8) {
+                    Button {
+                        Task { await store.refreshLimitTokenFromKeychain() }
+                    } label: {
+                        if store.isRefreshingLimitToken {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("한도 토큰 캐시 갱신")
+                        }
+                    }
+                    .disabled(store.disableKeychainAccess || store.isRefreshingLimitToken)
+                    Text("누를 때만 Keychain 확인")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                if let limitTokenRefreshError = store.limitTokenRefreshError {
+                    Text(limitTokenRefreshError)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .lineLimit(2)
+                }
             }
 
             VStack(alignment: .leading, spacing: 4) {

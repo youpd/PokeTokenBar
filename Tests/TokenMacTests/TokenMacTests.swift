@@ -43,6 +43,18 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(report.daily[0].totalTokens, 20_815_691)
     }
 
+    func testCodexDailyReportMapsCachedInputTokens() throws {
+        let json = """
+        {"daily":[{"date":"2026-06-17","inputTokens":10,"outputTokens":20,
+        "cachedInputTokens":30,"totalTokens":60,"costUSD":0.25}]}
+        """.data(using: .utf8)!
+
+        let report = try JSONDecoder().decode(DailyReport.self, from: json)
+
+        XCTAssertEqual(report.daily[0].cacheReadTokens, 30)
+        XCTAssertEqual(report.daily[0].totalCost, 0.25)
+    }
+
     func testDailyReportEmpty() throws {
         // ccusage-codex 데이터 없음 케이스
         let json = #"{"daily":[],"totals":null}"#.data(using: .utf8)!
@@ -92,6 +104,33 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(m.monthly.last?.totalTokens, 671_185_849)
     }
 
+    func testCodexMonthlyReportCostUSD() throws {
+        let json = """
+        {"monthly":[{"month":"2026-06","inputTokens":10,"outputTokens":20,
+        "cachedInputTokens":30,"totalTokens":60,"costUSD":0.25}]}
+        """.data(using: .utf8)!
+
+        let report = try JSONDecoder().decode(MonthlyReport.self, from: json)
+
+        XCTAssertEqual(report.monthly[0].totalTokens, 60)
+        XCTAssertEqual(report.monthly[0].totalCost, 0.25)
+    }
+
+    func testPeriodUsageSumsDailyRows() {
+        let daily = [
+            DailyUsage(date: "2026-06-16", inputTokens: 1, outputTokens: 2,
+                       cacheCreationTokens: 3, cacheReadTokens: 4, totalTokens: 10, totalCost: 0.1),
+            DailyUsage(date: "2026-06-17", inputTokens: 5, outputTokens: 6,
+                       cacheCreationTokens: 7, cacheReadTokens: 8, totalTokens: 26, totalCost: 0.2),
+        ]
+
+        let period = PeriodUsage(period: "2026-06-14", daily: daily)
+
+        XCTAssertEqual(period.period, "2026-06-14")
+        XCTAssertEqual(period.totalTokens, 36)
+        XCTAssertEqual(period.totalCost, 0.3, accuracy: 0.001)
+    }
+
     func testBlockBurnRateDecoding() throws {
         let json = """
         {"blocks":[{"id":"b","startTime":"2026-06-11T01:00:00.000Z","endTime":"2026-06-11T06:00:00.000Z",
@@ -135,6 +174,30 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertNil(status.sevenDayOpus)
         XCTAssertEqual(status.sevenDay?.utilization, 16.0)
     }
+
+    func testCodexRateLimitStatus() throws {
+        let json = """
+        {"rateLimits":{"limitId":"codex","limitName":null,
+        "primary":{"usedPercent":86,"windowDurationMins":300,"resetsAt":1781694161},
+        "secondary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1781855658},
+        "credits":{"hasCredits":false,"unlimited":false,"balance":null},
+        "individualLimit":null,"planType":"team","rateLimitReachedType":null},
+        "rateLimitsByLimitId":{"codex":{"limitId":"codex","limitName":null,
+        "primary":{"usedPercent":86,"windowDurationMins":300,"resetsAt":1781694161},
+        "secondary":{"usedPercent":58,"windowDurationMins":10080,"resetsAt":1781855658},
+        "credits":{"hasCredits":false,"unlimited":false,"balance":null},
+        "individualLimit":null,"planType":"team","rateLimitReachedType":null}}}
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(CodexRateLimitStatus.self, from: json)
+
+        XCTAssertEqual(status.codex.primary?.usedPercent, 86)
+        XCTAssertEqual(status.codex.primary?.displayName, "5시간 세션")
+        XCTAssertEqual(status.codex.secondary?.displayName, "주간")
+        XCTAssertEqual(status.codex.planType, "team")
+        XCTAssertTrue(status.hasVisibleLimit)
+        XCTAssertNotNil(status.codex.primary?.resetDate)
+    }
 }
 
 #if os(macOS)
@@ -151,3 +214,35 @@ final class KeychainNoUIQueryTests: XCTestCase {
     }
 }
 #endif
+
+final class OAuthCredentialDataTests: XCTestCase {
+    func testCredentialParsesMillisecondExpiration() {
+        let futureMillis = Int(Date().addingTimeInterval(3600).timeIntervalSince1970 * 1000)
+        let data = """
+        {"claudeAiOauth":{"accessToken":"token-1","expiresAt":\(futureMillis)}}
+        """.data(using: .utf8)!
+
+        let credential = OAuthCredentialData.credential(from: data)
+
+        XCTAssertEqual(credential?.accessToken, "token-1")
+        XCTAssertEqual(credential?.isExpired, false)
+    }
+
+    func testCredentialTreatsPastExpirationAsExpired() {
+        let pastMillis = Int(Date().addingTimeInterval(-3600).timeIntervalSince1970 * 1000)
+        let data = """
+        {"claudeAiOauth":{"accessToken":"token-1","expiresAt":\(pastMillis)}}
+        """.data(using: .utf8)!
+
+        XCTAssertEqual(OAuthCredentialData.credential(from: data)?.isExpired, true)
+    }
+
+    func testCredentialParsesSecurityCLIOutputWithTrailingNewline() {
+        let data = """
+        {"claudeAiOauth":{"accessToken":"token-1"}}
+
+        """.data(using: .utf8)!
+
+        XCTAssertEqual(OAuthCredentialData.credential(from: data)?.accessToken, "token-1")
+    }
+}
