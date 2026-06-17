@@ -173,4 +173,13 @@ final class OAuthCredentialDataTests: XCTestCase {
 
         XCTAssertEqual(OAuthCredentialData.credential(from: data)?.isExpired, true)
     }
+
+    func testCredentialParsesSecurityCLIOutputWithTrailingNewline() {
+        let data = """
+        {"claudeAiOauth":{"accessToken":"token-1"}}
+
+        """.data(using: .utf8)!
+
+        XCTAssertEqual(OAuthCredentialData.credential(from: data)?.accessToken, "token-1")
+    }
 }

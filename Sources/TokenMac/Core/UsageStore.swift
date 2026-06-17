@@ -318,6 +318,7 @@ final class UsageStore {
             do {
                 limits = try await limitsProvider.fetch(allowKeychainPrompt: false)
                 limitsAvailable = true
+                AppLog.write("limits refreshed fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             } catch {
                 // 비공식 endpoint 실패 → 섹션 숨김, 토큰 표시는 무영향
                 if limits == nil { limitsAvailable = false }
@@ -341,6 +342,7 @@ final class UsageStore {
             limits = try await limitsProvider.fetch(allowKeychainPrompt: true)
             limitsAvailable = true
             limitTokenRefreshError = nil
+            AppLog.write("limits refreshed by user action fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             AppLog.write("limits refreshed from keychain by user action")
         } catch {
             limitTokenRefreshError = "\(error)"
