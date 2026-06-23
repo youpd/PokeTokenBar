@@ -82,6 +82,22 @@ final class CompanionStoreTests: XCTestCase {
         XCTAssertEqual(s.state.lastDate, "2026-06-24")
     }
 
+    func testEmptyDataDoesNotConsumeBackfill() {
+        let s = tempStore()
+        // 기동 직후 빈 새로고침(데이터 없음) → 알 유지, backfill 미소진
+        s.update(todayTokens: 0, todayDate: "2026-06-23", monthTotal: 0,
+                 burnTier: .idle, limitWarning: false, hasUsageData: false)
+        XCTAssertFalse(s.state.didApplyInitialBackfill)
+        XCTAssertFalse(s.state.hatched)
+        XCTAssertEqual(s.displayState, .egg)
+        // 실제 누적 데이터 도착 → 이제 소급 부화(높은 레벨)
+        s.update(todayTokens: 1_000_000, todayDate: "2026-06-23", monthTotal: 200_000_000,
+                 burnTier: .normal, limitWarning: false, hasUsageData: true)
+        XCTAssertTrue(s.state.didApplyInitialBackfill)
+        XCTAssertTrue(s.state.hatched)
+        XCTAssertGreaterThan(s.level, 3)   // 소급으로 레벨 점프
+    }
+
     func testStateMapping() {
         let s = tempStore()
         s.update(todayTokens: 1_000_000, todayDate: "2026-06-23", monthTotal: 1_000_000,

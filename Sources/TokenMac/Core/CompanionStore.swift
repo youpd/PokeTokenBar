@@ -60,6 +60,12 @@ final class CompanionStore {
         let isBackfillNow = !state.didApplyInitialBackfill
 
         if !state.didApplyInitialBackfill {
+            // 데이터 도착 전(앱 기동 직후 빈 새로고침)에는 부화/소급하지 않는다 — 알 유지.
+            // 이걸 막지 않으면 빈 데이터로 backfill 이 소진돼 기존 사용량 소급 성장이 사라진다.
+            guard hasUsageData, monthTotal > 0 || todayTokens > 0 else {
+                displayState = .egg
+                return
+            }
             // 최초 소급: 월 누적으로 초기 레벨 부여(근사), 알 부화
             state.totalXP = CompanionBalance.xp(forTokens: max(monthTotal, todayTokens))
             state.claimedTodayXP = CompanionBalance.xp(forTokens: todayTokens)
