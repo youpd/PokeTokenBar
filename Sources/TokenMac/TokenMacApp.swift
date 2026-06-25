@@ -109,8 +109,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func renderCompanionFrame() {
         statusItem.button?.image = CompanionRenderer.image(
-            size: 20, state: companion.displayState, level: companion.level,
-            time: Date().timeIntervalSinceReferenceDate)
+            size: 20, traits: companion.activeTraits, state: companion.displayState,
+            level: companion.level, time: Date().timeIntervalSinceReferenceDate)
     }
 
     /// 코인 스핀 — 프레임별 지속시간으로 이징 표현, 캐시된 NSImage 교체만 수행.

@@ -1,8 +1,8 @@
 import Foundation
 import Observation
 
-/// 게임 상태의 출처. UsageStore(사용량 출처)의 값을 읽어 XP/레벨/표시 상태를 갱신한다.
-/// 성장/해금 로직을 UsageStore 에 넣지 않고 분리.
+/// 게임 상태의 출처. UsageStore(사용량 출처)의 값을 읽어 현재 active 캐릭터에 XP/레벨을 적립하고,
+/// max 도달 시 Collection 으로 졸업 + 미보유 캐릭터로 새 알 부화.
 @MainActor
 @Observable
 final class CompanionStore {
@@ -11,16 +11,20 @@ final class CompanionStore {
     private(set) var todayXP = 0
     private(set) var displayState: CompanionStateKind = .egg
     private(set) var justLeveledUp = false
+    /// 직전 졸업한 캐릭터 이름(새 알 안내 문구용). nil 이면 졸업 없음.
+    private(set) var justGraduated: String?
     private var levelUpUntil: Date?
 
     private let clock: () -> Date
     private let fileURL: URL
+    private var rng: any RandomNumberGenerator
 
-    var name: String { state.displayName }
+    var activeTraits: CompanionTraits { CompanionCatalog.traits(for: state.activeCompanionID) }
+    var name: String { activeTraits.displayName }
     var isMaxed: Bool { level >= CompanionBalance.maxLevel }
+    var collectionInstances: [CompanionInstance] { state.collection }
 
-    /// 현재 레벨 진행분 / 다음 레벨까지
-    var xpIntoLevel: Int { state.totalXP - CompanionBalance.cumulativeXP(toReach: level) }
+    var xpIntoLevel: Int { state.activeXP - CompanionBalance.cumulativeXP(toReach: level) }
     var xpForNextLevel: Int {
         guard !isMaxed else { return max(1, xpIntoLevel) }
         return CompanionBalance.cumulativeXP(toReach: level + 1) - CompanionBalance.cumulativeXP(toReach: level)
@@ -29,20 +33,20 @@ final class CompanionStore {
         guard xpForNextLevel > 0 else { return 1 }
         return min(1, max(0, Double(xpIntoLevel) / Double(xpForNextLevel)))
     }
-    /// 다음 레벨까지 남은 토큰 추정 — 팝오버 "다음 낮잠 자리까지 N tokens"
     var tokensToNextLevel: Int {
         guard !isMaxed else { return 0 }
-        let needXP = max(0, CompanionBalance.cumulativeXP(toReach: level + 1) - state.totalXP)
-        // xp = sqrt(tok/divisor)*mult  →  tok = (xp/mult)^2 * divisor
+        let needXP = max(0, CompanionBalance.cumulativeXP(toReach: level + 1) - state.activeXP)
         let x = Double(needXP) / CompanionBalance.xpMultiplier
         return Int((x * x * CompanionBalance.tokenXPDivisor).rounded())
     }
 
-    init(clock: @escaping () -> Date = Date.init, fileURL: URL? = nil) {
+    init(clock: @escaping () -> Date = Date.init, fileURL: URL? = nil,
+         rng: any RandomNumberGenerator = SystemRandomNumberGenerator()) {
         self.clock = clock
         self.fileURL = fileURL ?? Self.defaultURL()
+        self.rng = rng
         load()
-        level = CompanionBalance.level(forXP: state.totalXP)
+        level = CompanionBalance.level(forXP: state.activeXP)
         if state.hatched { displayState = .idle }
     }
 
@@ -53,53 +57,69 @@ final class CompanionStore {
         return dir.appendingPathComponent("companion-state.json")
     }
 
-    /// UsageStore 갱신 후 호출. 토큰 증분 → XP, 표시 상태 결정. 중복 지급 없음.
     func update(todayTokens: Int, todayDate: String, monthTotal: Int,
                 burnTier: SpinTier, limitWarning: Bool, hasUsageData: Bool) {
+        justGraduated = nil   // 이번 update 에서 졸업했을 때만 설정
         let prevLevel = level
         let isBackfillNow = !state.didApplyInitialBackfill
 
         if !state.didApplyInitialBackfill {
-            // 데이터 도착 전(앱 기동 직후 빈 새로고침)에는 부화/소급하지 않는다 — 알 유지.
-            // 이걸 막지 않으면 빈 데이터로 backfill 이 소진돼 기존 사용량 소급 성장이 사라진다.
             guard hasUsageData, monthTotal > 0 || todayTokens > 0 else {
                 displayState = .egg
                 return
             }
-            // 최초 소급: 월 누적으로 초기 레벨 부여(근사), 알 부화
-            state.totalXP = CompanionBalance.xp(forTokens: max(monthTotal, todayTokens))
+            state.activeXP = CompanionBalance.xp(forTokens: max(monthTotal, todayTokens))
             state.claimedTodayXP = CompanionBalance.xp(forTokens: todayTokens)
             state.lastDate = todayDate
             state.didApplyInitialBackfill = true
-            state.hatched = todayTokens > 0 || monthTotal > 0
+            state.hatched = true
         } else {
-            if todayDate != state.lastDate {           // 자정 경계
+            if todayDate != state.lastDate {
                 state.lastDate = todayDate
                 state.claimedTodayXP = 0
                 if todayTokens > 0 { state.streakDays += 1 }
             }
-            // 오늘 XP 증분만 적립 (sqrt 곡선 일관성 유지)
             let todayXPNow = CompanionBalance.xp(forTokens: todayTokens)
             if todayXPNow > state.claimedTodayXP {
-                state.totalXP += todayXPNow - state.claimedTodayXP
+                state.activeXP += todayXPNow - state.claimedTodayXP
                 state.claimedTodayXP = todayXPNow
                 state.hatched = true
             }
         }
 
-        level = CompanionBalance.level(forXP: state.totalXP)
-        todayXP = CompanionBalance.xp(forTokens: todayTokens)
+        level = CompanionBalance.level(forXP: state.activeXP)
 
-        if level > prevLevel && !isBackfillNow {   // 최초 소급 부화는 레벨업 연출 아님
+        // Max → 졸업 + 새 알 (소급 부화 시엔 졸업 보류, 다음 실제 갱신에서)
+        if level >= CompanionBalance.maxLevel && !isBackfillNow {
+            graduateIfPossible()
+        } else if level > prevLevel && !isBackfillNow {
             justLeveledUp = true
             levelUpUntil = clock().addingTimeInterval(4)
         } else if let until = levelUpUntil, clock() > until {
             justLeveledUp = false; levelUpUntil = nil
         }
 
+        todayXP = CompanionBalance.xp(forTokens: todayTokens)
         displayState = computeState(burnTier: burnTier, limitWarning: limitWarning,
                                     hasUsageData: hasUsageData, today: todayTokens)
         save()
+    }
+
+    /// active 가 max 도달: Collection 으로 보존하고 미보유 캐릭터로 새 알. 미보유 없으면 maxed 유지.
+    private func graduateIfPossible() {
+        let owned = Set(state.collection.map(\.companionID)).union([state.activeCompanionID])
+        guard let next = CompanionCatalog.nextUnowned(ownedIDs: owned, using: &rng) else {
+            return   // 모든 기본 캐릭터 보유 — maxed 유지(중복/등급은 Phase 3)
+        }
+        state.collection.append(CompanionInstance(
+            companionID: state.activeCompanionID, finalXP: state.activeXP,
+            maxed: true, hatchedAt: nil, maxedAt: clock()))
+        justGraduated = name
+        state.activeCompanionID = next.id
+        state.activeXP = 0
+        level = 1
+        justLeveledUp = true
+        levelUpUntil = clock().addingTimeInterval(5)
     }
 
     private func computeState(burnTier: SpinTier, limitWarning: Bool,
@@ -115,7 +135,6 @@ final class CompanionStore {
         }
     }
 
-    // MARK: 영속
     private func load() {
         guard let data = try? Data(contentsOf: fileURL),
               let s = try? JSONDecoder().decode(CompanionState.self, from: data) else { return }
