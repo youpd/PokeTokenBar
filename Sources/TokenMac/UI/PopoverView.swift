@@ -1,9 +1,12 @@
 import SwiftUI
 
+enum PopoverTab { case home, collection }
+
 struct PopoverView: View {
     @Environment(UsageStore.self) private var store
     @Environment(CompanionStore.self) private var companion
     @State private var showSettings = false
+    @State private var tab: PopoverTab = .home
 
     var body: some View {
         // NOTE: 설정을 .sheet 로 띄우면 transient 팝오버가 닫힐 때 시트가 고아로 남아
@@ -21,13 +24,24 @@ struct PopoverView: View {
 
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 12) {
-            CompanionHeader(store: companion)
-            Divider()
-            header
-            Divider()
-            if store.hasAnyLimits {
-                limitsSection
+            Picker("", selection: $tab) {
+                Text("홈").tag(PopoverTab.home)
+                Text("컬렉션").tag(PopoverTab.collection)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            if tab == .collection {
+                CollectionView(store: companion)
+            } else {
+                CompanionHeader(store: companion)
                 Divider()
+                header
+                Divider()
+                if store.hasAnyLimits {
+                    limitsSection
+                    Divider()
+                }
             }
             footer
         }
