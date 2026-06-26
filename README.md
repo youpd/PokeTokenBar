@@ -31,22 +31,22 @@ PokeTokenBar shows how many AI coding tokens you've burned today — Claude Code
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="assets/menubar.png" width="200" alt="Menu bar"><br>
-<b>Menu bar</b> — animated companion + today's total tokens (compact).
-</td>
-<td width="50%" valign="top">
 <img src="assets/screenshot-home.png" alt="Popover home"><br>
-<b>Home</b> — companion, evolution progress, and usage/limits below.
+<b>Home</b> — companion + evolution progress, today's tokens (Claude Code + Codex with cost), and official 5h/weekly limit bars.
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-collection.png" alt="Collection / Pokédex"><br>
 <b>Collection (Pokédex)</b> — graduated Pokémon, sorted by rarity, with full evolution lines and capture dates.
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-empty.png" alt="Empty Pokédex"><br>
 <b>Empty Pokédex</b> — an animated mascot nudges you to start.
+</td>
+<td width="50%" valign="top">
+<img src="assets/menubar.png" width="200" alt="Menu bar"><br>
+<b>Menu bar</b> — animated companion + today's total tokens (compact).
 </td>
 </tr>
 </table>

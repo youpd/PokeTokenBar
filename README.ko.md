@@ -31,22 +31,22 @@ PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex)을 macOS
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="assets/menubar.png" width="200" alt="메뉴바"><br>
-<b>메뉴바</b> — 움직이는 companion + 오늘 토큰 합계(compact).
-</td>
-<td width="50%" valign="top">
 <img src="assets/screenshot-home.png" alt="팝오버 홈"><br>
-<b>홈</b> — companion·진화 진행, 그 아래 사용량/한도.
+<b>홈</b> — companion·진화 진행, 오늘 토큰(Claude Code + Codex, 비용 포함), 공식 5h/주간 한도 바.
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-collection.png" alt="컬렉션 / 도감"><br>
 <b>컬렉션(도감)</b> — 졸업한 포켓몬을 희귀도순으로, 전체 진화 라인과 획득일과 함께.
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-empty.png" alt="빈 도감"><br>
 <b>빈 도감</b> — 움직이는 마스코트가 시작을 안내합니다.
+</td>
+<td width="50%" valign="top">
+<img src="assets/menubar.png" width="200" alt="메뉴바"><br>
+<b>메뉴바</b> — 움직이는 companion + 오늘 토큰 합계(compact).
 </td>
 </tr>
 </table>

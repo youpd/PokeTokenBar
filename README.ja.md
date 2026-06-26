@@ -31,22 +31,22 @@ PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code
 <table>
 <tr>
 <td width="50%" valign="top">
-<img src="assets/menubar.png" width="200" alt="メニューバー"><br>
-<b>メニューバー</b> — 動くパートナー + 今日のトークン合計（compact）。
-</td>
-<td width="50%" valign="top">
 <img src="assets/screenshot-home.png" alt="ポップオーバー ホーム"><br>
-<b>ホーム</b> — パートナー・進化の進捗、その下に使用量／上限。
+<b>ホーム</b> — パートナー・進化の進捗、今日のトークン（Claude Code + Codex、コスト付き）、公式の5h/週間上限バー。
 </td>
-</tr>
-<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-collection.png" alt="コレクション / 図鑑"><br>
 <b>コレクション（図鑑）</b> — 卒業したポケモンをレア度順に、進化ライン全体と捕獲日とともに。
 </td>
+</tr>
+<tr>
 <td width="50%" valign="top">
 <img src="assets/screenshot-empty.png" alt="空の図鑑"><br>
 <b>空の図鑑</b> — 動くマスコットが始め方を案内します。
+</td>
+<td width="50%" valign="top">
+<img src="assets/menubar.png" width="200" alt="メニューバー"><br>
+<b>メニューバー</b> — 動くパートナー + 今日のトークン合計（compact）。
 </td>
 </tr>
 </table>
