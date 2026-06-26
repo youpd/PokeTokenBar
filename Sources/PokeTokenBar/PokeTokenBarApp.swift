@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
     private var store: UsageStore!
     private var companion: CompanionStore!
+    private var updater: UpdateChecker!
 
     // 메뉴바 캐릭터 애니메이션 — 단일 타이머로 프레임 순환.
     // 프레임 = 이미 22px 로 합성된 이미지 + delay. egg/static 은 2프레임 bob, animated 는 GIF 실제 프레임.
@@ -32,7 +33,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Self.migrateLegacyStorageIfNeeded()   // TokenMac → PokeTokenBar 리네임: 기존 companion/캐시 보존
         store = UsageStore()
         companion = CompanionStore()
+        updater = UpdateChecker()
         store.localizationLanguage = companion.language   // 알림 현지화용 미러 시드
+        Task { await updater.check() }                    // 기동 시 1회 업데이트 확인
 
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
@@ -44,7 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         popover.contentViewController = NSHostingController(
-            rootView: PopoverView().environment(store).environment(companion))
+            rootView: PopoverView().environment(store).environment(companion).environment(updater))
         popover.behavior = .transient
 
         observeStore()
@@ -204,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
+            Task { await updater.check() }   // 팝오버 열 때 재확인(내부 minInterval 디바운스)
         }
     }
 }

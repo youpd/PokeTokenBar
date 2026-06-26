@@ -5,6 +5,7 @@ enum PopoverTab { case home, collection }
 struct PopoverView: View {
     @Environment(UsageStore.self) private var store
     @Environment(CompanionStore.self) private var companion
+    @Environment(UpdateChecker.self) private var updater
     @State private var showSettings = false
     @State private var tab: PopoverTab = .home
 
@@ -25,8 +26,32 @@ struct PopoverView: View {
         .frame(width: 360)
     }
 
+    @ViewBuilder
+    private var updateBanner: some View {
+        if let update = updater.available {
+            HStack(spacing: 8) {
+                Text(l.updateAvailable(update.version, current: updater.currentVersion))
+                    .font(.caption)
+                Spacer()
+                if updater.isUpdating {
+                    Text(l.updating).font(.caption2).foregroundStyle(.secondary)
+                    ProgressView().controlSize(.small)
+                } else {
+                    Button(l.updateButton) { updater.applyUpdate() }
+                        .buttonStyle(.borderedProminent).controlSize(.small)
+                    Button(l.updateLater) { updater.skipCurrent() }
+                        .buttonStyle(.borderless).controlSize(.small).foregroundStyle(.secondary)
+                }
+            }
+            .padding(8)
+            .background(Color.accentColor.opacity(0.12))
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+    }
+
     private var mainContent: some View {
         VStack(alignment: .leading, spacing: 12) {
+            updateBanner
             Picker("", selection: $tab) {
                 Text(l.home).tag(PopoverTab.home)
                 Text(l.collection).tag(PopoverTab.collection)
