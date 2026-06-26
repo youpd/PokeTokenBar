@@ -1,5 +1,5 @@
 import XCTest
-@testable import TokenMac
+@testable import PokeTokenBar
 
 #if os(macOS)
 import Security

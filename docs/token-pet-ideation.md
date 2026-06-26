@@ -1,14 +1,14 @@
-# TokenMac 성장형 캐릭터 아이데이션
+# PokeTokenBar 성장형 캐릭터 아이데이션
 
 작성일: 2026-06-23
-대상: TokenMac의 다음 제품 방향
+대상: PokeTokenBar의 다음 제품 방향
 상태: 아이데이션 / 제품 컨셉 초안
 
 ## 1. 한 줄 컨셉
 
 AI 코딩 토큰 사용량이 2D 도트 캐릭터의 경험치가 되고, 사용자가 코딩할수록 캐릭터가 레벨업하고 새로운 캐릭터를 해금하는 macOS 메뉴바 앱.
 
-현재 TokenMac은 "오늘 AI 코딩 토큰을 얼마나 썼는지 보여주는 유틸리티"다. 여기에 성장형 캐릭터를 얹으면 "AI 코딩을 많이 한 날의 흔적이 쌓이는 작은 동료"가 된다. 숫자를 확인하는 앱에서 매일 열어보고 싶은 앱으로 바뀌는 것이 핵심이다.
+현재 PokeTokenBar은 "오늘 AI 코딩 토큰을 얼마나 썼는지 보여주는 유틸리티"다. 여기에 성장형 캐릭터를 얹으면 "AI 코딩을 많이 한 날의 흔적이 쌓이는 작은 동료"가 된다. 숫자를 확인하는 앱에서 매일 열어보고 싶은 앱으로 바뀌는 것이 핵심이다.
 
 ## 2. 왜 이 방향이 좋은가
 
@@ -44,7 +44,7 @@ AI 코딩 토큰 사용량이 2D 도트 캐릭터의 경험치가 되고, 사용
 
 ## 3. 제품 이름 방향
 
-`TokenMac`은 현재 기능에는 잘 맞지만, 캐릭터 성장 컨셉까지 담기에는 건조하다. 이름 변경은 기능 구현보다 먼저 확정할 필요는 없지만, README와 브랜딩을 바꿀 때를 대비해 후보를 정리한다.
+`PokeTokenBar`은 현재 기능에는 잘 맞지만, 캐릭터 성장 컨셉까지 담기에는 건조하다. 이름 변경은 기능 구현보다 먼저 확정할 필요는 없지만, README와 브랜딩을 바꿀 때를 대비해 후보를 정리한다.
 
 ### 3.1 이름 후보
 
@@ -66,7 +66,7 @@ AI 코딩 토큰 사용량이 2D 도트 캐릭터의 경험치가 되고, 사용
 2. `PromptCat`: AI 코딩 맥락과 고양이를 같이 드러낸다.
 3. `PromptPal`: 고양이 외 캐릭터까지 확장할 때 안정적이다.
 
-실행안: 당장은 저장소명과 앱명을 유지하고, 문서/README에서는 "TokenMac is evolving into a token-powered coding cat companion"처럼 소개한다. 캐릭터 기능 반응이 좋으면 v2에서 `TokenCat` 계열로 이름 변경을 결정한다.
+실행안: 당장은 저장소명과 앱명을 유지하고, 문서/README에서는 "PokeTokenBar is evolving into a token-powered coding cat companion"처럼 소개한다. 캐릭터 기능 반응이 좋으면 v2에서 `TokenCat` 계열로 이름 변경을 결정한다.
 
 ## 4. 핵심 경험
 
@@ -311,7 +311,7 @@ MVP 캐릭터 세트:
 - "Mochi는 Collection에서 계속 만날 수 있어요."
 - "새 Token Egg가 도착했어요."
 
-이 루프는 [git-goods/gitanimals](https://github.com/git-goods/gitanimals)의 "활동으로 펫을 얻고 성장시키며, 여러 펫을 farm처럼 보여주는" 재미를 TokenMac의 로컬 메뉴바 앱에 맞게 줄인 버전이다. 거래/길드 같은 외부 시스템은 넣지 않고, 개인의 누적 작업 기록과 수집 경험에 집중한다.
+이 루프는 [git-goods/gitanimals](https://github.com/git-goods/gitanimals)의 "활동으로 펫을 얻고 성장시키며, 여러 펫을 farm처럼 보여주는" 재미를 PokeTokenBar의 로컬 메뉴바 앱에 맞게 줄인 버전이다. 거래/길드 같은 외부 시스템은 넣지 않고, 개인의 누적 작업 기록과 수집 경험에 집중한다.
 
 ## 6. 도트 캐릭터 아트 방향
 
@@ -519,7 +519,7 @@ struct CompanionEgg: Codable, Identifiable {
 1인 로컬 앱 기준으로는 Application Support JSON이면 충분하다.
 
 ```text
-~/Library/Application Support/TokenMac/companion-state.json
+~/Library/Application Support/PokeTokenBar/companion-state.json
 ```
 
 UserDefaults도 가능하지만, 해금 목록과 상태가 늘어나면 JSON이 디버깅하기 쉽다.
@@ -576,4 +576,4 @@ enum CompanionBalance {
 
 > 토큰 사용량은 숫자로 보면 비용이지만, 캐릭터 성장으로 보면 기록이 된다.
 
-이 가설이 맞으면 TokenMac은 "AI 코딩 사용량 표시 앱"에서 "AI 코딩을 함께 자라는 작은 동료"로 포지셔닝이 바뀐다. 오픈소스에서 유명해질 가능성은 후자가 더 크다.
+이 가설이 맞으면 PokeTokenBar은 "AI 코딩 사용량 표시 앱"에서 "AI 코딩을 함께 자라는 작은 동료"로 포지셔닝이 바뀐다. 오픈소스에서 유명해질 가능성은 후자가 더 크다.

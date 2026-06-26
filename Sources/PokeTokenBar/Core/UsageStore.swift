@@ -231,7 +231,7 @@ final class UsageStore {
         isRefreshing = true
         // App Nap 방지 — 백그라운드 스로틀로 ccusage 가 타임아웃되는 것을 막는다 (시스템 슬립은 허용)
         let activity = ProcessInfo.processInfo.beginActivity(
-            options: .userInitiatedAllowingIdleSystemSleep, reason: "TokenMac usage refresh")
+            options: .userInitiatedAllowingIdleSystemSleep, reason: "PokeTokenBar usage refresh")
         defer {
             ProcessInfo.processInfo.endActivity(activity)
             isRefreshing = false
@@ -466,7 +466,7 @@ final class UsageStore {
 
     private func writeParitySnapshot() {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("TokenMac")
+            .appendingPathComponent("PokeTokenBar")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         var providerEntries: [[String: Any]] = []
         for snapshot in snapshots {

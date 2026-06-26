@@ -1,15 +1,15 @@
 import Foundation
 
-/// ~/Library/Logs/TokenMac.log 단순 append 로거 (디버깅/장애 추적용)
+/// ~/Library/Logs/PokeTokenBar.log 단순 append 로거 (디버깅/장애 추적용)
 enum AppLog {
     private static let url: URL = {
         let dir = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Logs")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("TokenMac.log")
+        return dir.appendingPathComponent("PokeTokenBar.log")
     }()
 
-    private static let queue = DispatchQueue(label: "tokenmac.log")
+    private static let queue = DispatchQueue(label: "poketokenbar.log")
 
     static func write(_ message: String) {
         let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"

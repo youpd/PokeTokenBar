@@ -7,7 +7,7 @@ actor SpriteStore {
     private var mem: [String: Data] = [:]
     private let dir: URL = {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("TokenMac/sprites")
+            .appendingPathComponent("PokeTokenBar/sprites")
         try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         return d
     }()
@@ -34,7 +34,7 @@ actor SpriteStore {
 enum SpriteLoader {
     static let cacheDir: URL = {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("TokenMac/sprites")
+            .appendingPathComponent("PokeTokenBar/sprites")
     }()
 
     /// 디스크 캐시에 이미 있으면 동기 반환(네트워크 없음). 없으면 nil.

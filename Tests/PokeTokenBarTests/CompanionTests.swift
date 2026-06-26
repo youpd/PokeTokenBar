@@ -1,5 +1,5 @@
 import XCTest
-@testable import TokenMac
+@testable import PokeTokenBar
 
 // MARK: 경제
 

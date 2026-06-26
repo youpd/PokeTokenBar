@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "TokenMac",
+    name: "PokeTokenBar",
     platforms: [.macOS(.v14)],
     targets: [
         .executableTarget(
-            name: "TokenMac",
-            path: "Sources/TokenMac"
+            name: "PokeTokenBar",
+            path: "Sources/PokeTokenBar"
         ),
         .testTarget(
-            name: "TokenMacTests",
-            dependencies: ["TokenMac"],
-            path: "Tests/TokenMacTests"
+            name: "PokeTokenBarTests",
+            dependencies: ["PokeTokenBar"],
+            path: "Tests/PokeTokenBarTests"
         ),
     ]
 )

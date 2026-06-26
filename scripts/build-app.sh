@@ -1,10 +1,10 @@
 #!/bin/bash
-# TokenMac.app 번들 조립 + /Applications 설치
+# PokeTokenBar.app 번들 조립 + /Applications 설치
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 VERSION="1.0.0"
-APP_NAME="TokenMac"
+APP_NAME="PokeTokenBar"
 BUILD_DIR="build"
 APP="$BUILD_DIR/$APP_NAME.app"
 
@@ -22,7 +22,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleIdentifier</key><string>io.github.chattymin.tokenmac</string>
+    <key>CFBundleIdentifier</key><string>io.github.chattymin.poketokenbar</string>
     <key>CFBundleName</key><string>$APP_NAME</string>
     <key>CFBundleExecutable</key><string>$APP_NAME</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -37,7 +37,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 PLIST
 
 echo "==> codesign"
-SIGN_IDENTITY="${CODESIGN_IDENTITY:-TokenMac Local}"
+SIGN_IDENTITY="${CODESIGN_IDENTITY:-PokeTokenBar Local}"
 # 안정적 Keychain ACL 을 위해서는 인증서 존재가 아니라 유효한 codesigning identity 가 필요하다.
 if security find-identity -v -p codesigning | grep -F "\"$SIGN_IDENTITY\"" >/dev/null; then
     # 안정적 자체 서명 신원 → 재빌드해도 Keychain "항상 허용" 유지

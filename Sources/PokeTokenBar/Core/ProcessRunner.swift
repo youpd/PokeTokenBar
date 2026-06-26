@@ -28,7 +28,7 @@ enum ProcessRunner {
     /// warm 대비 크게 느려질 수 있어 넉넉히 잡는다.
     static func runJSON(binary: String, arguments: [String], timeout: TimeInterval = 180) async throws -> Data {
         let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tokenmac-\(UUID().uuidString).out")
+            .appendingPathComponent("poketokenbar-\(UUID().uuidString).out")
         FileManager.default.createFile(atPath: outURL.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: outURL) }
 
@@ -91,7 +91,7 @@ enum ProcessRunner {
         timeout: TimeInterval = 20
     ) async throws -> Data {
         let outURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("tokenmac-\(UUID().uuidString).jsonl")
+            .appendingPathComponent("poketokenbar-\(UUID().uuidString).jsonl")
         FileManager.default.createFile(atPath: outURL.path, contents: nil)
         defer { try? FileManager.default.removeItem(at: outURL) }
 

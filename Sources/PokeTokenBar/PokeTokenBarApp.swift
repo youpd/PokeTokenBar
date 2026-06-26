@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 @main
-struct TokenMacApp: App {
+struct PokeTokenBarApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
@@ -29,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        Self.migrateLegacyStorageIfNeeded()   // TokenMac → PokeTokenBar 리네임: 기존 companion/캐시 보존
         store = UsageStore()
         companion = CompanionStore()
         store.localizationLanguage = companion.language   // 알림 현지화용 미러 시드
@@ -168,6 +169,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     from: .zero, operation: .sourceOver, fraction: 1)
         img.unlockFocus()
         return img
+    }
+
+    /// TokenMac→PokeTokenBar 리네임에 따른 1회 이전: 기존 Application Support 폴더를
+    /// 새 이름으로 옮겨 companion 진행상황·스프라이트 캐시·스냅샷을 보존한다(신규 폴더 없을 때만).
+    private static func migrateLegacyStorageIfNeeded() {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let old = base.appendingPathComponent("TokenMac")
+        let new = base.appendingPathComponent("PokeTokenBar")
+        guard fm.fileExists(atPath: old.path), !fm.fileExists(atPath: new.path) else { return }
+        try? fm.moveItem(at: old, to: new)
     }
 
     /// 스프라이트가 아직 없을 때(부화 전/로딩 중) 메뉴바에 표시하는 알 글리프.

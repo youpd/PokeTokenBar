@@ -53,18 +53,18 @@ private actor OAuthAccessTokenCache {
             return cachedCredential.accessToken
         }
 
-        if let credential = try Self.readTokenMacCache() {
+        if let credential = try Self.readPokeTokenBarCache() {
             cachedCredential = credential
             return credential.accessToken
         }
         if let credential = try Self.readClaudeCredentialsFile() {
             cachedCredential = credential
-            Self.writeTokenMacCache(credential.data)
+            Self.writePokeTokenBarCache(credential.data)
             return credential.accessToken
         }
         if let credential = Self.readClaudeKeychainViaSecurityCLI() {
             cachedCredential = credential
-            Self.writeTokenMacCache(credential.data)
+            Self.writePokeTokenBarCache(credential.data)
             return credential.accessToken
         }
         guard allowKeychainPrompt else {
@@ -73,18 +73,18 @@ private actor OAuthAccessTokenCache {
 
         let credential = try Self.readClaudeKeychain(allowKeychainPrompt: allowKeychainPrompt)
         cachedCredential = credential
-        Self.writeTokenMacCache(credential.data)
+        Self.writePokeTokenBarCache(credential.data)
         return credential.accessToken
     }
 
     func invalidate(removePersistentCache: Bool = false) {
         cachedCredential = nil
         if removePersistentCache {
-            Self.deleteTokenMacCache()
+            Self.deletePokeTokenBarCache()
         }
     }
 
-    private nonisolated static func readTokenMacCache() throws -> OAuthCredentialData.Credential? {
+    private nonisolated static func readPokeTokenBarCache() throws -> OAuthCredentialData.Credential? {
         if KeychainAccessGate.isDisabled {
             throw LimitsError.keychainAccessDisabled
         }
@@ -103,7 +103,7 @@ private actor OAuthAccessTokenCache {
         case errSecSuccess:
             guard let data = item as? Data else { return nil }
             guard let credential = OAuthCredentialData.credential(from: data), !credential.isExpired else {
-                deleteTokenMacCache()
+                deletePokeTokenBarCache()
                 return nil
             }
             return credential
@@ -116,7 +116,7 @@ private actor OAuthAccessTokenCache {
         }
     }
 
-    private nonisolated static func writeTokenMacCache(_ data: Data) {
+    private nonisolated static func writePokeTokenBarCache(_ data: Data) {
         if KeychainAccessGate.isDisabled { return }
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -136,7 +136,7 @@ private actor OAuthAccessTokenCache {
 
         var addQuery = query
         addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrLabel as String] = "TokenMac OAuth Cache"
+        addQuery[kSecAttrLabel as String] = "PokeTokenBar OAuth Cache"
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
         let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
         if addStatus != errSecSuccess {
@@ -144,7 +144,7 @@ private actor OAuthAccessTokenCache {
         }
     }
 
-    private nonisolated static func deleteTokenMacCache() {
+    private nonisolated static func deletePokeTokenBarCache() {
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: OAuthCredentialData.tokenMacCacheService,
@@ -259,7 +259,7 @@ private enum SecurityCLIKeychainReader {
 
 enum OAuthCredentialData {
     static let claudeKeychainService = "Claude Code-credentials"
-    static let tokenMacCacheService = "io.github.chattymin.tokenmac.cache"
+    static let tokenMacCacheService = "io.github.chattymin.poketokenbar.cache"
     static let tokenMacCacheAccount = "oauth.claude"
 
     struct Credential {
