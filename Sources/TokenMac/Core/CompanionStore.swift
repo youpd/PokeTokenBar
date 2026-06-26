@@ -194,8 +194,7 @@ final class CompanionStore {
     }
 
     private func chooseBase() -> Int {
-        let pool = PokemonPool.baseIDs
-        return pool[Int(rng.next() % UInt64(pool.count))]
+        PokemonPool.pick(roll: Int(rng.next() % UInt64(PokemonPool.totalWeight)))
     }
 
     private func computeState(burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool, today: Int) -> CompanionStateKind {
