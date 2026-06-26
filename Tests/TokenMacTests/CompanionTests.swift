@@ -36,6 +36,47 @@ final class PokemonBalanceTests: XCTestCase {
     }
 }
 
+// MARK: 부화 풀 (가중 선택)
+
+final class PokemonPoolTests: XCTestCase {
+    func testTotalWeightMatchesEntries() {
+        // common 8개×8 + uncommon 1×4 + rare 7×2 + legendary 1×1 = 83
+        XCTAssertEqual(PokemonPool.totalWeight, 83)
+    }
+
+    func testPickMapsEachRollAndRespectsPerEntryWeight() {
+        // 0..<totalWeight 전 구간을 훑으면 각 엔트리는 정확히 weight(tier) 회 선택돼야 한다.
+        var counts: [Int: Int] = [:]
+        for roll in 0..<PokemonPool.totalWeight {
+            counts[PokemonPool.pick(roll: roll), default: 0] += 1
+        }
+        for e in PokemonPool.entries {
+            XCTAssertEqual(counts[e.id], PokemonPool.weight(e.tier), "id=\(e.id) tier=\(e.tier)")
+        }
+        // 모든 엔트리가 한 번 이상 선택 가능
+        XCTAssertEqual(Set(counts.keys), Set(PokemonPool.entries.map(\.id)))
+    }
+
+    func testRarerTierIsLessLikelyThanCommon() {
+        let common = PokemonPool.weight(.common)
+        XCTAssertGreaterThan(common, PokemonPool.weight(.uncommon))
+        XCTAssertGreaterThan(PokemonPool.weight(.uncommon), PokemonPool.weight(.rare))
+        XCTAssertGreaterThan(PokemonPool.weight(.rare), PokemonPool.weight(.legendary))
+        // 집계: common tier 총가중 > rare tier 총가중 > legendary
+        func tierTotal(_ t: Rarity) -> Int {
+            PokemonPool.entries.filter { $0.tier == t }.reduce(0) { $0 + PokemonPool.weight($1.tier) }
+        }
+        XCTAssertGreaterThan(tierTotal(.common), tierTotal(.rare))
+        XCTAssertGreaterThan(tierTotal(.rare), tierTotal(.legendary))
+    }
+
+    func testPickRollWrapsSafely() {
+        // roll 이 범위를 넘어도(% 처리) 유효한 id 반환
+        XCTAssertTrue(PokemonPool.entries.map(\.id).contains(PokemonPool.pick(roll: PokemonPool.totalWeight)))
+        XCTAssertTrue(PokemonPool.entries.map(\.id).contains(PokemonPool.pick(roll: 99_999)))
+    }
+}
+
 // MARK: 헬퍼
 
 struct SeededRNG: RandomNumberGenerator {

@@ -132,7 +132,42 @@ struct CompanionState: Codable, Sendable {
     init() {}
 }
 
-/// 부화 후보 base 종 id (숫자 = PokéAPI 식별자). 3단/2단/무진화/분기 골고루.
+/// 부화 후보 base 종 — (PokéAPI 식별자, 선택 가중 tier). 3단/2단/무진화/분기 골고루.
+/// tier 는 *선택 확률*만 결정하는 큐레이트 값 — 표시/경제 희귀도는 PokéAPI capture_rate
+/// 에서 별도 파생(EvoLine.rarity, 권위 소스)하며 보통 일치한다.
 enum PokemonPool {
-    static let baseIDs = [1, 4, 7, 10, 16, 172, 133, 129, 66, 92, 280, 128, 131, 446, 304, 252]
+    static let entries: [(id: Int, tier: Rarity)] = [
+        // common — 흔하게 부화
+        (10, .common), (16, .common), (172, .common), (129, .common),
+        (66, .common), (92, .common), (280, .common), (304, .common),
+        // uncommon
+        (446, .uncommon),
+        // rare — 스타터/이브이 등
+        (1, .rare), (4, .rare), (7, .rare), (133, .rare),
+        (128, .rare), (131, .rare), (252, .rare),
+        // legendary — 드물게
+        (144, .legendary),
+    ]
+
+    /// tier 별 선택 가중치(엔트리당). 희귀할수록 작다 → 부화 확률 낮음.
+    static func weight(_ tier: Rarity) -> Int {
+        switch tier {
+        case .common:    return 8
+        case .uncommon:  return 4
+        case .rare:      return 2
+        case .legendary: return 1
+        }
+    }
+
+    static var totalWeight: Int { entries.reduce(0) { $0 + weight($1.tier) } }
+
+    /// 0..<totalWeight 범위 난수로 가중 선택 → base id.
+    static func pick(roll: Int) -> Int {
+        var r = roll % max(1, totalWeight)
+        for e in entries {
+            r -= weight(e.tier)
+            if r < 0 { return e.id }
+        }
+        return entries[0].id
+    }
 }
