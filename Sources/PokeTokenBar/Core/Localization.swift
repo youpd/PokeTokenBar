@@ -150,6 +150,16 @@ struct L {
           "Claude の上限取得に失敗しました。しばらくして再試行してください。")
     }
 
+    // MARK: 업데이트 알림
+    func updateAvailable(_ version: String, current: String) -> String {
+        t("🆕 v\(version) 사용 가능 (현재 \(current))",
+          "🆕 v\(version) available (you have \(current))",
+          "🆕 v\(version) が利用可能（現在 \(current)）")
+    }
+    var updateButton: String { t("업데이트", "Update", "更新") }
+    var updateLater: String { t("나중에", "Later", "後で") }
+    var updating: String { t("업데이트 중…", "Updating…", "更新中…") }
+
     // MARK: 알림
     var notifCritical: String { t("한도 임박", "Limit imminent", "上限切迫") }
     var notifWarning: String { t("한도 경고", "Limit warning", "上限警告") }
