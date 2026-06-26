@@ -87,7 +87,7 @@ struct EvoLineView: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
-                if i > 0 { Image(systemName: "arrow.right").font(.system(size: 8)).foregroundStyle(.tertiary) }
+                if i > 0 { Image(systemName: "arrow.right").font(.system(size: thumb * 0.2)).foregroundStyle(.tertiary) }
                 SpriteView(speciesID: node.id, size: thumb)
                     .opacity(node.kind == "future" ? 0.32 : 1)
                     .saturation(node.kind == "future" ? 0.4 : 1)
@@ -222,7 +222,7 @@ struct CollectionView: View {
                                 Spacer()
                                 Text(store.l.formsComplete(entry.chainOrder.count)).font(.system(size: 9)).foregroundStyle(.secondary)
                             }
-                            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 38)
+                            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 56)
                             if let caughtAt = entry.caughtAt {
                                 Text(caughtAt, style: .relative).font(.system(size: 9)).foregroundStyle(.tertiary)
                             }
@@ -234,6 +234,6 @@ struct CollectionView: View {
                 }
             }
         }
-        .frame(maxHeight: 260)
+        .frame(maxHeight: 520)
     }
 }
