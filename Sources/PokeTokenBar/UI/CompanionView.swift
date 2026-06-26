@@ -87,7 +87,7 @@ struct EvoLineView: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
-                if i > 0 { Image(systemName: "arrow.right").font(.system(size: 8)).foregroundStyle(.tertiary) }
+                if i > 0 { Image(systemName: "arrow.right").font(.system(size: thumb * 0.2)).foregroundStyle(.tertiary) }
                 SpriteView(speciesID: node.id, size: thumb)
                     .opacity(node.kind == "future" ? 0.32 : 1)
                     .saturation(node.kind == "future" ? 0.4 : 1)
@@ -203,12 +203,12 @@ struct DexSummaryHeader: View {
 struct CollectionView: View {
     let store: CompanionStore
     var body: some View {
-        ScrollView {
-            if store.dexEntries.isEmpty {
-                Text(store.l.dexEmpty)
-                    .font(.caption).foregroundStyle(.tertiary)
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(.vertical, 8)
-            } else {
+        if store.dexEntries.isEmpty {
+            emptyState
+        } else {
+            // 고정 높이 — maxHeight 는 팝오버 재오픈 시 ScrollView fitting size 가 작게 잡혀
+            // 크기가 줄어드는 문제가 있어 height 로 고정한다.
+            ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
                     DexSummaryHeader(store: store)
                     ForEach(store.dexEntriesSorted) { entry in
@@ -222,7 +222,7 @@ struct CollectionView: View {
                                 Spacer()
                                 Text(store.l.formsComplete(entry.chainOrder.count)).font(.system(size: 9)).foregroundStyle(.secondary)
                             }
-                            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 38)
+                            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 56)
                             if let caughtAt = entry.caughtAt {
                                 Text(caughtAt, style: .relative).font(.system(size: 9)).foregroundStyle(.tertiary)
                             }
@@ -233,7 +233,20 @@ struct CollectionView: View {
                     }
                 }
             }
+            .frame(height: 520)
         }
-        .frame(maxHeight: 260)
+    }
+
+    /// 빈 도감 — 안내 마스코트(피카츄, PokéAPI) + 포켓몬을 모으라는 문구.
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            SpriteView(speciesID: 25, size: 96, animated: true)   // 피카츄(움직임)
+            Text(store.l.dexEmptyTitle).font(.callout.weight(.semibold))
+            Text(store.l.dexEmptyHint)
+                .font(.caption).foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 28)
     }
 }
