@@ -90,10 +90,18 @@ private actor OAuthAccessTokenCache {
         return credential.accessToken
     }
 
-    /// 무프롬프트 Keychain 읽기 — ACL 미허용·접근 불가·형식 오류는 모두 nil 로 흡수(다이얼로그 없음).
-    /// no-UI 쿼리이므로 권한이 없으면 프롬프트 대신 errSecInteractionNotAllowed 가 나고 try? 가 nil 로 만든다.
+    /// 무프롬프트 Keychain 읽기 — no-UI 쿼리라 권한이 없으면 프롬프트 대신 errSecInteractionNotAllowed.
+    /// '아직 항상 허용 전'(interactionNotAllowed)은 정상 흐름이라 조용히 nil. 그 외(형식 오류·접근 불가)는
+    /// 진단을 위해 로그를 남기고 nil — 자동 경로가 왜 토큰을 못 구했는지 추적 가능하게.
     private nonisolated static func readClaudeKeychainSilently() -> OAuthCredentialData.Credential? {
-        try? readClaudeKeychain(allowKeychainPrompt: false)
+        do {
+            return try readClaudeKeychain(allowKeychainPrompt: false)
+        } catch LimitsError.keychainInteractionNotAllowed {
+            return nil
+        } catch {
+            AppLog.write("silent claude keychain read failed: \(error)")
+            return nil
+        }
     }
 
     func invalidate(removePersistentCache: Bool = false) {
