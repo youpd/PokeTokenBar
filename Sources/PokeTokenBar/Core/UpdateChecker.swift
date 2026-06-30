@@ -111,15 +111,18 @@ final class UpdateChecker {
     /// - `brew update` 선행: auto-update 빈도 제한(기본 24h)으로 stale 한 로컬 tap 때문에 `brew upgrade`
     ///   가 no-op(exit 0) 되어 "업데이트 안 됨 + 앱만 종료"가 나던 문제를 막는다.
     /// - 앱 종료를 기다림(pgrep): 실행 중 번들 교체 레이스 + 재오픈 LaunchServices(-600) 레이스 회피.
-    /// - `open` 재시도: 종료 직후 재오픈이 실패할 수 있어 여러 번 시도.
+    /// - brew 를 백그라운드+워치독(≤300s)으로 감싸 hang 시에도 reopen 이 반드시 실행되게 함
+    ///   (앱이 종료된 채 영영 안 돌아오는 것 방지). 종료 직후 재오픈 실패 대비 `open` 재시도.
     /// 인자는 positional($1=brew, $2=bundlePath)로 전달 — 셸 인젝션 차단.
     private static func launchDetachedUpgrade(brew: String) {
         let bundlePath = Bundle.main.bundlePath
         let script = """
         for i in $(seq 1 40); do pgrep -x PokeTokenBar >/dev/null 2>&1 || break; sleep 0.5; done
         export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
-        "$1" update
-        "$1" upgrade --cask poke-token-bar
+        ( "$1" update; "$1" upgrade --cask poke-token-bar ) &
+        brew_pid=$!
+        for i in $(seq 1 300); do kill -0 "$brew_pid" 2>/dev/null || break; sleep 1; done
+        kill "$brew_pid" 2>/dev/null
         for i in $(seq 1 15); do open "$2" && break; sleep 1; done
         """
         let task = Process()
