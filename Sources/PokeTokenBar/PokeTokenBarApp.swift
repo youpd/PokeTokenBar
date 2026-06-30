@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var menuIndex = 0
     private var menuTimer: Timer?
     private var menuLoadGen = 0     // async 로드 경합 방지
+    private var displayAwake = true     // 디스플레이 켜짐 여부 (꺼지면 메뉴 애니메이션 정지 — 배터리)
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -53,6 +54,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         popover.behavior = .transient
 
         observeStore()
+        observeDisplaySleep()
         applyState()
     }
 
@@ -78,6 +80,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateCompanion()
         ensureMenuAnimation()
+        syncMenuAnimation()   // 가시성 상태 주기적 재평가(occlusion 이 잘못 멈춰도 자가 복구)
     }
 
     /// UsageStore 값 → CompanionStore (사용량 적립 + 표시 상태). 매 관찰 변경 시 호출.
@@ -94,39 +97,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: 메뉴바 애니메이션
 
     /// 현재 포켓몬에 맞춰 메뉴바 프레임을 준비. 종이 바뀐 경우에만 재로딩.
-    /// 즉시(캐시/알)로 먼저 보여주고, animated GIF 가 받아지면 교체.
-    private func ensureMenuAnimation() {
+    /// 정적 스프라이트로 먼저 보여주고, animated GIF 가 받아지면 교체한다(메뉴바도 GIF로 움직임).
+    /// 에너지 통제는 ① delay 하한 0.2s(≈5fps) ② 안 보이면 정지(menuShouldAnimate) ③ 저전력 모드
+    /// 에선 GIF 생략(가벼운 bob)로 처리한다 — 통제된 저프레임 + 비가시 시 정지로 저전력.
+    private func ensureMenuAnimation(forceRebuild: Bool = false) {
         let id = companion.currentSpeciesID
-        if id == menuSpriteID, !menuFrames.isEmpty { return }   // 이미 이 종으로 애니메이션 중
+        if !forceRebuild, id == menuSpriteID, !menuFrames.isEmpty { return }   // 이미 이 종으로 애니메이션 중
         menuSpriteID = id
         menuLoadGen += 1
         let gen = menuLoadGen
 
-        guard let id else {                  // 알: 즉시 2프레임 bob
+        guard let id else {                  // 알: 2프레임 bob
             setMenuFrames(Self.eggFrames())
             return
         }
-        // 캐시된 정적 스프라이트가 있으면 즉시 표시(없으면 알 placeholder)
+        // 정적 스프라이트 bob 을 먼저(없으면 받아와서). GIF 가 받아지면 아래에서 교체.
         if let cached = SpriteLoader.cachedImage(speciesID: id) {
             setMenuFrames(Self.bobFrames(from: cached))
         } else {
             setMenuFrames(Self.eggFrames())
-        }
-        // animated GIF 우선 시도 → 실패 시 정적 스프라이트
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            if let data = await SpriteStore.shared.data(speciesID: id, animated: true) {
-                let raw = GIFDecoder.frames(from: data)
-                if raw.count > 1 {
-                    guard gen == self.menuLoadGen else { return }
-                    self.setMenuFrames(raw.map { (Self.menuBarImage(from: $0.image, up: false), $0.delay) })
-                    return
-                }
-            }
-            if let sprite = await SpriteLoader.image(speciesID: id) {
+            Task { @MainActor [weak self] in
+                guard let self, gen == self.menuLoadGen,
+                      let sprite = await SpriteLoader.image(speciesID: id) else { return }
                 guard gen == self.menuLoadGen else { return }
                 self.setMenuFrames(Self.bobFrames(from: sprite))
             }
+        }
+
+        // 풀 GIF 애니메이션(저전력 모드에서는 생략하고 bob 유지). delay 하한 0.1s(≤10fps)로 redraw 통제.
+        guard !ProcessInfo.processInfo.isLowPowerModeEnabled else { return }
+        Task { @MainActor [weak self] in
+            guard let self, gen == self.menuLoadGen,
+                  let data = await SpriteStore.shared.data(speciesID: id, animated: true) else { return }
+            let raw = GIFDecoder.frames(from: data)
+            guard raw.count > 1, gen == self.menuLoadGen else { return }
+            // 메뉴바 GIF 는 delay 하한 0.2s(≈5fps)로 캡 — 22px 스프라이트엔 충분하고 저전력.
+            self.setMenuFrames(raw.map { (Self.menuBarImage(from: $0.image, up: false), max(0.2, $0.delay)) })
         }
     }
 
@@ -139,17 +145,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 현재 프레임을 메뉴바에 올리고, 그 프레임의 delay 후 다음 프레임 예약(자기 재예약).
     private func advanceMenu() {
         menuTimer?.invalidate()
+        menuTimer = nil
         guard !menuFrames.isEmpty else { return }
         let frame = menuFrames[menuIndex % menuFrames.count]
-        statusItem.button?.image = frame.image
-        guard menuFrames.count > 1 else { return }   // 단일 프레임이면 정지
-        menuTimer = Timer.scheduledTimer(withTimeInterval: frame.delay, repeats: false) { [weak self] _ in
-            Task { @MainActor in
+        statusItem.button?.image = frame.image   // 현재 프레임은 항상 반영(정지 중에도 올바른 스프라이트)
+        // 화면 꺼짐/메뉴바 가림(occlusion) 또는 단일 프레임이면 다음 프레임 예약 안 함 → 정지(낭비 제거).
+        guard menuShouldAnimate, menuFrames.count > 1 else { return }
+        let timer = Timer(timeInterval: frame.delay, repeats: false) { [weak self] _ in
+            // 메인 런루프에서 발화 → Task 없이 동기 처리(프레임당 Task 할당 제거, 배터리)
+            MainActor.assumeIsolated {
                 guard let self else { return }
                 self.menuIndex = (self.menuIndex + 1) % self.menuFrames.count
                 self.advanceMenu()
             }
         }
+        timer.tolerance = frame.delay * 0.3   // 웨이크업 코얼레싱 (배터리)
+        RunLoop.main.add(timer, forMode: .common)
+        menuTimer = timer
+    }
+
+    /// 메뉴바가 실제로 보이고(occlusion) 화면이 켜져 있을 때만 애니메이션 — 안 보이면 정지(낭비 제거).
+    private var menuShouldAnimate: Bool {
+        displayAwake && (statusItem.button?.window?.occlusionState.contains(.visible) ?? true)
     }
 
     // MARK: 프레임 합성 (22px)
@@ -211,6 +228,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKeyAndOrderFront(nil)
             Task { await updater.check() }   // 팝오버 열 때 재확인(내부 minInterval 디바운스)
+        }
+    }
+
+    // MARK: 디스플레이 / 메뉴바 가시성 (에너지 절약 — 안 보이면 애니메이션 정지)
+
+    private func observeDisplaySleep() {
+        let workspace = NSWorkspace.shared.notificationCenter
+        workspace.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.setDisplayAwake(false) }
+        }
+        workspace.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.setDisplayAwake(true) }
+        }
+        // 메뉴바가 가려지면(풀스크린 등으로 occlusion) 애니메이션 정지, 다시 보이면 재개.
+        NotificationCenter.default.addObserver(
+            forName: NSWindow.didChangeOcclusionStateNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.syncMenuAnimation() }
+        }
+    }
+
+    private func setDisplayAwake(_ awake: Bool) {
+        displayAwake = awake
+        syncMenuAnimation()
+    }
+
+    /// menuShouldAnimate 상태에 맞춰 애니메이션을 재개/정지한다(멱등 — 중복 호출 안전).
+    private func syncMenuAnimation() {
+        if menuShouldAnimate {
+            if menuTimer == nil { advanceMenu() }   // 재개
+        } else {
+            menuTimer?.invalidate()
+            menuTimer = nil
         }
     }
 }

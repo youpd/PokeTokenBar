@@ -79,6 +79,7 @@ final class UsageStore {
     private let limitsProvider: any ClaudeLimitsProviding
     private let codexLimitsProvider: any CodexLimitsProviding
     private var timer: Timer?
+    private var pollingSuspended = false   // 디스플레이 꺼짐 동안 폴링 정지 (배터리)
     private var emptyUsageRetryTask: Task<Void, Never>?
     /// 같은 한도 블록(resets_at 기준)에 대해 알림 1회만 발화
     private var notifiedKeys: Set<String> = []
@@ -221,6 +222,17 @@ final class UsageStore {
         ) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
+        // 디스플레이 꺼짐 → 폴링(ccusage 서브프로세스 spawn) 일시정지, 켜짐 → 재개 + 즉시 갱신 (배터리)
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.suspendPolling() }
+        }
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in self?.resumePolling() }
+        }
 
         requestNotificationAuthorization()
         if autoRefresh { Task { await refresh() } }
@@ -229,13 +241,28 @@ final class UsageStore {
     private func reschedule() {
         timer?.invalidate()
         timer = nil
-        guard refreshInterval > 0 else { return }
+        guard !pollingSuspended, refreshInterval > 0 else { return }
         let t = Timer(timeInterval: refreshInterval, repeats: true) { _ in
             Task { @MainActor [weak self] in await self?.refresh() }
         }
         t.tolerance = refreshInterval * 0.1
         RunLoop.main.add(t, forMode: .common)
         timer = t
+    }
+
+    /// 디스플레이 꺼짐 → 폴링 타이머 정지(예약된 ccusage 서브프로세스 spawn 중단).
+    private func suspendPolling() {
+        pollingSuspended = true
+        timer?.invalidate()
+        timer = nil
+    }
+
+    /// 디스플레이 켜짐 → 폴링 재개 + 즉시 1회 갱신(켜졌을 때 메뉴 숫자 최신화).
+    private func resumePolling() {
+        guard pollingSuspended else { return }
+        pollingSuspended = false
+        reschedule()
+        Task { await refresh() }
     }
 
     // MARK: 갱신
