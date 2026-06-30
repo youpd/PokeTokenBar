@@ -81,10 +81,19 @@ actor LocalUsageCache {
         codexCache = snap.codex
     }
 
+    /// 어떤 조회 윈도우(오늘/주/월)에도 들지 않는 오래된 파일 blob 을 제거해 캐시 무한 증가를 막는다.
+    /// (가장 넓은 윈도우는 월·주 시작이라 40일이면 충분한 여유. 삭제된 세션 파일 blob 도 함께 정리.)
+    private func prune() {
+        let cutoff = Date().addingTimeInterval(-40 * 86400)
+        claudeCache = claudeCache.filter { $0.value.mtime >= cutoff }
+        codexCache = codexCache.filter { $0.value.mtime >= cutoff }
+    }
+
     /// 변경이 있으면 디스크에 저장(최소 60초 간격으로 throttle — 잦은 쓰기 방지).
     private func saveIfNeeded() {
         guard dirty else { return }
         if let last = lastSave, Date().timeIntervalSince(last) < 60 { return }
+        prune()
         let snap = Snapshot(claude: claudeCache, codex: codexCache)
         if let data = try? JSONEncoder().encode(snap) {
             try? data.write(to: Self.fileURL)
