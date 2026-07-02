@@ -89,8 +89,10 @@ actor LocalUsageCache {
     private func ensureLoaded() {
         guard !loaded else { return }
         loaded = true
-        guard let data = try? Data(contentsOf: fileURL),
-              let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
+        guard let raw = try? Data(contentsOf: fileURL) else { return }
+        // zlib 압축 스냅샷(현행) → 실패 시 평문 JSON(구버전 캐시) 폴백
+        let data = (try? (raw as NSData).decompressed(using: .zlib) as Data) ?? raw
+        guard let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         claudeCache = snap.claude
         codexCache = snap.codex
     }
@@ -110,7 +112,9 @@ actor LocalUsageCache {
         prune()
         let snap = Snapshot(claude: claudeCache, codex: codexCache)
         if let data = try? JSONEncoder().encode(snap) {
-            try? data.write(to: fileURL)
+            // JSON 은 zlib 로 크게 압축됨(수 MB → 수백 KB). 실패 시 평문 저장(로드가 양쪽 다 처리).
+            let out = (try? (data as NSData).compressed(using: .zlib) as Data) ?? data
+            try? out.write(to: fileURL)
             dirty = false
             lastSave = now()
         }
