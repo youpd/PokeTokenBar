@@ -63,6 +63,7 @@ PokeTokenBar shows how many AI coding tokens you've burned today — Claude Code
 - **Hatch & evolve** — eggs hatch into Pokémon fetched live from [PokéAPI](https://pokeapi.co/); tokens spent since install evolve them through their real tree (1/2/3 stages, branching).
 - **Rarity-weighted** — common hatch often, legendary rarely; rarer Pokémon take more tokens to graduate (≈3 days common → ≈24 days legendary at heavy use).
 - **Graduate & collect** — reach the final evolution + threshold and it graduates to your **Pokédex**; a fresh egg arrives.
+- **Shiny & natures** — 1-in-64 hatches are ✨ shiny (distinct colors, kept through evolution); every Pokémon gets one of 25 natures.
 - **Animated** — Gen-V sprites animate in the menu bar and popover. Names & UI in **Korean / English / Japanese**.
 
 ## Features
