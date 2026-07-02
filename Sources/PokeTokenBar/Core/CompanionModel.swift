@@ -228,6 +228,8 @@ struct CompanionState: Codable, Sendable {
     var usedSinceInstall = 0
     // 현재 알이 생긴 뒤 쓴 토큰(부화 인큐베이션). 누적(usedSinceInstall)과 별개 — 졸업 후 새 알마다 0.
     var eggUsage = 0
+    // 알 상태에서 미리 롤해둔 부화 종(프리패칭) — 부화 순간 네트워크 딜레이 제거. 재시작에도 유지.
+    var pendingHatchID: Int?
     var claimedTodayTokens = 0
     var lastDate = ""
     // 현재 포켓몬(없으면 알)
@@ -246,6 +248,7 @@ struct CompanionState: Codable, Sendable {
         installBaselineSet = try c.decodeIfPresent(Bool.self, forKey: .installBaselineSet) ?? false
         usedSinceInstall = try c.decodeIfPresent(Int.self, forKey: .usedSinceInstall) ?? 0
         eggUsage = try c.decodeIfPresent(Int.self, forKey: .eggUsage) ?? 0
+        pendingHatchID = try c.decodeIfPresent(Int.self, forKey: .pendingHatchID)
         claimedTodayTokens = try c.decodeIfPresent(Int.self, forKey: .claimedTodayTokens) ?? 0
         lastDate = try c.decodeIfPresent(String.self, forKey: .lastDate) ?? ""
         active = try c.decodeIfPresent(MonState.self, forKey: .active)
