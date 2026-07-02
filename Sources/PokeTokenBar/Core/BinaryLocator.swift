@@ -65,7 +65,8 @@ enum BinaryLocator {
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: shell)
-        process.arguments = ["-ilc", "printf '<<<BIN:%s:BIN>>>' \"$(command -v \(binary) 2>/dev/null)\""]
+        // binary 를 위치 인자($1)로 전달 — 문자열 보간 금지(향후 호출자가 외부 입력을 넘겨도 주입 불가).
+        process.arguments = ["-ilc", #"printf '<<<BIN:%s:BIN>>>' "$(command -v "$1" 2>/dev/null)""#, "sh", binary]
         process.standardInput = FileHandle.nullDevice
         let output = Pipe()
         process.standardOutput = output

@@ -28,35 +28,36 @@ final class UsageStore {
     /// 0 = manual
     var refreshInterval: TimeInterval {
         didSet {
-            UserDefaults.standard.set(refreshInterval, forKey: "refreshInterval")
+            defaults.set(refreshInterval, forKey: "refreshInterval")
             reschedule()
         }
     }
     var warnThreshold: Double {
-        didSet { UserDefaults.standard.set(warnThreshold, forKey: "warnThreshold") }
+        didSet { defaults.set(warnThreshold, forKey: "warnThreshold") }
     }
     var critThreshold: Double {
-        didSet { UserDefaults.standard.set(critThreshold, forKey: "critThreshold") }
+        didSet { defaults.set(critThreshold, forKey: "critThreshold") }
     }
     // 메뉴바 표시 항목 (복수 선택 가능)
     var showTokensInMenu: Bool {
-        didSet { UserDefaults.standard.set(showTokensInMenu, forKey: "showTokensInMenu") }
+        didSet { defaults.set(showTokensInMenu, forKey: "showTokensInMenu") }
     }
     var showCostInMenu: Bool {
-        didSet { UserDefaults.standard.set(showCostInMenu, forKey: "showCostInMenu") }
+        didSet { defaults.set(showCostInMenu, forKey: "showCostInMenu") }
     }
     var showLimitInMenu: Bool {
-        didSet { UserDefaults.standard.set(showLimitInMenu, forKey: "showLimitInMenu") }
+        didSet { defaults.set(showLimitInMenu, forKey: "showLimitInMenu") }
     }
     // 알림(독립 토글)
     var limitNotifications: Bool {
-        didSet { UserDefaults.standard.set(limitNotifications, forKey: "limitNotifications") }
+        didSet { defaults.set(limitNotifications, forKey: "limitNotifications") }
     }
     var companionNotifications: Bool {
-        didSet { UserDefaults.standard.set(companionNotifications, forKey: "companionNotifications") }
+        didSet { defaults.set(companionNotifications, forKey: "companionNotifications") }
     }
     var disableKeychainAccess: Bool {
         didSet {
+            defaults.set(disableKeychainAccess, forKey: "disableKeychainAccess")   // 저장 누락이던 기존 버그 — 재시작 후 풀렸음
             KeychainAccessGate.isDisabled = disableKeychainAccess
             if disableKeychainAccess {
                 limits = nil
@@ -78,6 +79,8 @@ final class UsageStore {
     private let providers: [any UsageProvider]
     private let limitsProvider: any ClaudeLimitsProviding
     private let codexLimitsProvider: any CodexLimitsProviding
+    /// 설정 저장소 — 테스트는 suite 를 주입해 실제 사용자 설정을 오염시키지 않는다.
+    private let defaults: UserDefaults
     private var timer: Timer?
     private var pollingSuspended = false   // 디스플레이 꺼짐 동안 폴링 정지 (배터리)
     private var emptyUsageRetryTask: Task<Void, Never>?
@@ -193,11 +196,13 @@ final class UsageStore {
     init(providers: [any UsageProvider] = [LocalClaudeProvider(), LocalCodexProvider()],
          claudeLimitsProvider: any ClaudeLimitsProviding = OAuthLimitsProvider(),
          codexLimitsProvider: any CodexLimitsProviding = CodexRateLimitsProvider(),
-         autoRefresh: Bool = true) {
+         autoRefresh: Bool = true,
+         defaults: UserDefaults = .standard) {
         self.providers = providers
         self.limitsProvider = claudeLimitsProvider
         self.codexLimitsProvider = codexLimitsProvider
-        let d = UserDefaults.standard
+        self.defaults = defaults
+        let d = defaults
         refreshInterval = d.object(forKey: "refreshInterval") as? TimeInterval ?? 120
         warnThreshold = d.object(forKey: "warnThreshold") as? Double ?? 80
         critThreshold = d.object(forKey: "critThreshold") as? Double ?? 95
@@ -529,6 +534,8 @@ final class UsageStore {
     // MARK: parity-check.sh 용 스냅샷 파일
 
     private func writeParitySnapshot() {
+        // .app 번들에서만 기록 — 테스트가 실제 사용자 데이터 디렉토리의 스냅샷을 덮어쓰지 않도록.
+        guard Bundle.main.bundlePath.hasSuffix(".app") else { return }
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PokeTokenBar")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

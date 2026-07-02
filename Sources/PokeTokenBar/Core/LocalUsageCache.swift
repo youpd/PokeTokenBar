@@ -17,7 +17,21 @@ actor LocalUsageCache {
     private var dirty = false
     private var lastSave: Date?
 
-    private static let fileURL: URL = {
+    // 테스트 시임 — 기본값은 실환경(실 로그 루트·Application Support·실시간).
+    private let claudeRoot: URL?
+    private let codexRoot: URL?
+    private let fileURL: URL
+    private let now: @Sendable () -> Date
+
+    init(claudeRoot: URL? = nil, codexRoot: URL? = nil, fileURL: URL? = nil,
+         now: @escaping @Sendable () -> Date = Date.init) {
+        self.claudeRoot = claudeRoot
+        self.codexRoot = codexRoot
+        self.fileURL = fileURL ?? Self.defaultFileURL
+        self.now = now
+    }
+
+    private static let defaultFileURL: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PokeTokenBar")
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -27,7 +41,7 @@ actor LocalUsageCache {
     func claudeEntries(modifiedSince: Date) -> [LocalUsageReader.Entry] {
         ensureLoaded()
         let fmt = LocalUsageReader.localDayFormatter()
-        let all = collect(root: LocalUsageReader.claudeProjectsDir, since: modifiedSince, cache: &claudeCache) {
+        let all = collect(root: claudeRoot ?? LocalUsageReader.claudeProjectsDir, since: modifiedSince, cache: &claudeCache) {
             LocalUsageReader.parseClaudeFile($0, fmt: fmt)
         }
         saveIfNeeded()
@@ -37,7 +51,7 @@ actor LocalUsageCache {
     func codexEntries(modifiedSince: Date) -> [LocalUsageReader.Entry] {
         ensureLoaded()
         let fmt = LocalUsageReader.localDayFormatter()
-        let r = collect(root: LocalUsageReader.codexSessionsDir, since: modifiedSince, cache: &codexCache) {
+        let r = collect(root: codexRoot ?? LocalUsageReader.codexSessionsDir, since: modifiedSince, cache: &codexCache) {
             LocalUsageReader.parseCodexFile($0, fmt: fmt)
         }
         saveIfNeeded()
@@ -75,7 +89,7 @@ actor LocalUsageCache {
     private func ensureLoaded() {
         guard !loaded else { return }
         loaded = true
-        guard let data = try? Data(contentsOf: Self.fileURL),
+        guard let data = try? Data(contentsOf: fileURL),
               let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         claudeCache = snap.claude
         codexCache = snap.codex
@@ -84,7 +98,7 @@ actor LocalUsageCache {
     /// 어떤 조회 윈도우(오늘/주/월)에도 들지 않는 오래된 파일 blob 을 제거해 캐시 무한 증가를 막는다.
     /// (가장 넓은 윈도우는 월·주 시작이라 40일이면 충분한 여유. 삭제된 세션 파일 blob 도 함께 정리.)
     private func prune() {
-        let cutoff = Date().addingTimeInterval(-40 * 86400)
+        let cutoff = now().addingTimeInterval(-40 * 86400)
         claudeCache = claudeCache.filter { $0.value.mtime >= cutoff }
         codexCache = codexCache.filter { $0.value.mtime >= cutoff }
     }
@@ -92,13 +106,13 @@ actor LocalUsageCache {
     /// 변경이 있으면 디스크에 저장(최소 60초 간격으로 throttle — 잦은 쓰기 방지).
     private func saveIfNeeded() {
         guard dirty else { return }
-        if let last = lastSave, Date().timeIntervalSince(last) < 60 { return }
+        if let last = lastSave, now().timeIntervalSince(last) < 60 { return }
         prune()
         let snap = Snapshot(claude: claudeCache, codex: codexCache)
         if let data = try? JSONEncoder().encode(snap) {
-            try? data.write(to: Self.fileURL)
+            try? data.write(to: fileURL)
             dirty = false
-            lastSave = Date()
+            lastSave = now()
         }
     }
 }

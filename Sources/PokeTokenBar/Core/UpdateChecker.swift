@@ -34,7 +34,10 @@ final class UpdateChecker {
               (resp as? HTTPURLResponse)?.statusCode == 200,
               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tag = json["tag_name"] as? String,
-              let html = json["html_url"] as? String else { return }
+              let html = json["html_url"] as? String,
+              // 응답 필드가 NSWorkspace.open 으로 가므로 https + github.com 만 허용(스킴 하이재킹 방지)
+              let htmlURL = URL(string: html), htmlURL.scheme == "https", htmlURL.host == "github.com"
+        else { return }
         let latest = tag.hasPrefix("v") ? String(tag.dropFirst()) : tag
         let skipped = UserDefaults.standard.string(forKey: "skippedUpdateVersion")
         if Self.isNewer(latest, than: currentVersion), latest != skipped {

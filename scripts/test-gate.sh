@@ -16,7 +16,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-THRESHOLD="${THRESHOLD:-70}"
+THRESHOLD="${THRESHOLD:-75}"
 
 LOGIC_CORE=(
   "Sources/PokeTokenBar/Core/CompanionModel.swift"
@@ -25,6 +25,9 @@ LOGIC_CORE=(
   "Sources/PokeTokenBar/Core/Models.swift"
   "Sources/PokeTokenBar/Core/TokenFormatter.swift"
   "Sources/PokeTokenBar/Core/UsageProvider.swift"
+  "Sources/PokeTokenBar/Core/LocalUsageReader.swift"
+  "Sources/PokeTokenBar/Core/LocalUsageCache.swift"
+  "Sources/PokeTokenBar/Core/ModelPricing.swift"
 )
 
 echo "▶ swift test (--enable-code-coverage)"

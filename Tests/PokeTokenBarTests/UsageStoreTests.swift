@@ -73,15 +73,20 @@ private func codexLimits(primaryUsed: Int? = nil, secondaryUsed: Int? = nil) -> 
 
 @MainActor
 final class UsageStoreTests: XCTestCase {
+    /// 테스트 전용 defaults suite — 실제 사용자 설정(UserDefaults.standard)을 절대 건드리지 않는다.
+    private var testDefaults: UserDefaults!
+    private var suiteName: String!
+
     override func setUp() {
         super.setUp()
-        // 기본값으로 시작하도록 관련 UserDefaults 키 정리 (테스트 간 오염 방지)
-        for key in ["refreshInterval", "warnThreshold", "critThreshold",
-                    "showTokensInMenu", "showCostInMenu", "showLimitInMenu",
-                    "limitNotifications", "companionNotifications", "disableKeychainAccess"] {
-            UserDefaults.standard.removeObject(forKey: key)
-        }
+        suiteName = "ptb-test-\(UUID().uuidString)"
+        testDefaults = UserDefaults(suiteName: suiteName)
         KeychainAccessGate.isDisabled = false
+    }
+
+    override func tearDown() {
+        testDefaults.removePersistentDomain(forName: suiteName)
+        super.tearDown()
     }
 
     private func makeStore(
@@ -92,7 +97,8 @@ final class UsageStoreTests: XCTestCase {
         UsageStore(providers: providers,
                    claudeLimitsProvider: FakeClaudeLimits(status: claude),
                    codexLimitsProvider: FakeCodexLimits(status: codex),
-                   autoRefresh: false)
+                   autoRefresh: false,
+                   defaults: testDefaults)
     }
 
     // MARK: 집계
