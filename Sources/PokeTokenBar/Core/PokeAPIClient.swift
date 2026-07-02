@@ -1,8 +1,15 @@
 import Foundation
 
+/// 부화 샘플링용 종 요약 — rejection sampling 의 판정 재료.
+struct SpeciesInfo: Sendable {
+    let captureRate: Int    // 3(뮤츠급)~255(캐터피급), 공식 희귀도 신호
+    let isBase: Bool        // evolves_from_species == nil (진화라인 시작점)
+}
+
 /// 포켓몬 라인 데이터 제공(주입 가능 — 테스트는 스텁 사용).
 protocol PokeProviding: Sendable {
     func line(baseSpeciesID: Int) async throws -> EvoLine
+    func speciesInfo(_ id: Int) async throws -> SpeciesInfo
 }
 
 /// PokéAPI 클라이언트 — 종/진화체인을 런타임 fetch + 파싱. 포켓몬 데이터는 레포에 번들하지 않는다.
@@ -35,6 +42,12 @@ actor PokeAPIClient: PokeProviding {
             names[id] = byLang
         }
         return EvoLine(baseID: baseSpeciesID, tree: tree, rarity: rarity, names: names)
+    }
+
+    /// 부화 샘플러용 — species 캐시를 공유하므로 같은 id 재조회는 네트워크 0회.
+    func speciesInfo(_ id: Int) async throws -> SpeciesInfo {
+        let sp = try await species(id)
+        return SpeciesInfo(captureRate: sp.capture_rate, isBase: sp.evolves_from_species == nil)
     }
 
     private func species(_ id: Int) async throws -> SpeciesDTO {
@@ -72,6 +85,7 @@ struct SpeciesDTO: Decodable, Sendable {
     let is_mythical: Bool
     let names: [NameDTO]
     let evolution_chain: URLRef
+    let evolves_from_species: NamedRef?   // nil = 진화라인 시작점(base)
 }
 struct NameDTO: Decodable, Sendable { let name: String; let language: NamedRef }
 struct NamedRef: Decodable, Sendable { let name: String; let url: String? }

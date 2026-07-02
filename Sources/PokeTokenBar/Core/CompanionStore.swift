@@ -228,7 +228,12 @@ final class CompanionStore {
 
     func hatchIfNeeded() async {
         guard state.active == nil, !isHatching, state.eggUsage >= PokemonBalance.eggHatchThreshold else { return }
-        await hatch(baseID: chooseBase())
+        // 샘플링(네트워크) 동안 중복 진입 차단 — hatch() 자체 가드와 별개.
+        isHatching = true
+        let base = await chooseBase()
+        isHatching = false
+        guard let base else { return }   // 네트워크 불안정 → 알 유지, 다음 update 틱에 재시도
+        await hatch(baseID: base)
     }
 
     func hatch(baseID: Int) async {
@@ -268,8 +273,25 @@ final class CompanionStore {
         }
     }
 
-    private func chooseBase() -> Int {
-        PokemonPool.pick(roll: Int(rng.next() % UInt64(PokemonPool.totalWeight)))
+    /// 부화 종 선정 — 하드코딩 풀 없이 PokéAPI 전수(1~5세대)에서 rejection sampling.
+    ///   ① 1..649 균등 롤(Gen-V 애니메이션 스프라이트 보장 상한)
+    ///   ② base(진화라인 시작점)만 통과
+    ///   ③ capture_rate/255 확률로 채택 — 공식 희귀도 분포 그대로(캐터피 255 vs 뮤츠 3 = 85:1,
+    ///      전설군 전체 등장률 ≈ 0.25%)
+    ///   ④ 이미 수집한 base 는 ½ 확률로만 채택(미수집 부스트, 재부화/shiny 사냥은 열어둠)
+    /// 기대 시도 ~6회(콜 수 동일, species 는 actor 캐시로 재조회 0회). 실패 시 nil → 알 유지.
+    private func chooseBase() async -> Int? {
+        let maxID: UInt64 = 649
+        for _ in 0..<60 {   // 기대 ~6회, 상한은 오프라인/응답불량 시 네트워크 예산 가드
+            let id = Int(rng.next() % maxID) + 1
+            guard let info = try? await provider.speciesInfo(id) else { continue }
+            guard info.isBase else { continue }
+            guard rng.next() % 255 < UInt64(max(1, info.captureRate)) else { continue }
+            if state.collectedFinals.contains(where: { $0.hasPrefix("\(id):") }),
+               rng.next() % 2 == 0 { continue }
+            return id
+        }
+        return nil
     }
 
     private func computeState(burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool, today: Int) -> CompanionStateKind {

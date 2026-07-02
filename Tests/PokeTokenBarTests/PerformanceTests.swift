@@ -16,12 +16,11 @@ private func tmpURL() -> URL {
 // MARK: 순수 계산 핫패스
 
 final class PureComputePerformanceTests: XCTestCase {
-    func testPhaseThresholdAndPickThroughput() {
+    func testPhaseThresholdThroughput() {
         measure {
             var acc = 0
             for i in 0..<100_000 {
                 acc &+= PokemonBalance.phaseThreshold(rarity: .rare, totalForms: 3, stageIndex: i % 3)
-                acc &+= PokemonPool.pick(roll: i)
             }
             XCTAssertGreaterThan(acc, 0)
         }

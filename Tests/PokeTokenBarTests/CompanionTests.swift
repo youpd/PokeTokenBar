@@ -36,46 +36,7 @@ final class PokemonBalanceTests: XCTestCase {
     }
 }
 
-// MARK: 부화 풀 (가중 선택)
-
-final class PokemonPoolTests: XCTestCase {
-    func testTotalWeightMatchesEntries() {
-        // common 8개×8 + uncommon 1×4 + rare 7×2 + legendary 1×1 = 83
-        XCTAssertEqual(PokemonPool.totalWeight, 83)
-    }
-
-    func testPickMapsEachRollAndRespectsPerEntryWeight() {
-        // 0..<totalWeight 전 구간을 훑으면 각 엔트리는 정확히 weight(tier) 회 선택돼야 한다.
-        var counts: [Int: Int] = [:]
-        for roll in 0..<PokemonPool.totalWeight {
-            counts[PokemonPool.pick(roll: roll), default: 0] += 1
-        }
-        for e in PokemonPool.entries {
-            XCTAssertEqual(counts[e.id], PokemonPool.weight(e.tier), "id=\(e.id) tier=\(e.tier)")
-        }
-        // 모든 엔트리가 한 번 이상 선택 가능
-        XCTAssertEqual(Set(counts.keys), Set(PokemonPool.entries.map(\.id)))
-    }
-
-    func testRarerTierIsLessLikelyThanCommon() {
-        let common = PokemonPool.weight(.common)
-        XCTAssertGreaterThan(common, PokemonPool.weight(.uncommon))
-        XCTAssertGreaterThan(PokemonPool.weight(.uncommon), PokemonPool.weight(.rare))
-        XCTAssertGreaterThan(PokemonPool.weight(.rare), PokemonPool.weight(.legendary))
-        // 집계: common tier 총가중 > rare tier 총가중 > legendary
-        func tierTotal(_ t: Rarity) -> Int {
-            PokemonPool.entries.filter { $0.tier == t }.reduce(0) { $0 + PokemonPool.weight($1.tier) }
-        }
-        XCTAssertGreaterThan(tierTotal(.common), tierTotal(.rare))
-        XCTAssertGreaterThan(tierTotal(.rare), tierTotal(.legendary))
-    }
-
-    func testPickRollWrapsSafely() {
-        // roll 이 범위를 넘어도(% 처리) 유효한 id 반환
-        XCTAssertTrue(PokemonPool.entries.map(\.id).contains(PokemonPool.pick(roll: PokemonPool.totalWeight)))
-        XCTAssertTrue(PokemonPool.entries.map(\.id).contains(PokemonPool.pick(roll: 99_999)))
-    }
-}
+// (부화 풀 하드코딩 제거 — 선정 로직 테스트는 CompanionIdentityTests 의 샘플러 테스트로 대체)
 
 // MARK: 헬퍼
 
@@ -94,6 +55,24 @@ struct SeededRNG: RandomNumberGenerator {
 struct StubProvider: PokeProviding {
     let value: EvoLine
     func line(baseSpeciesID: Int) async throws -> EvoLine { value }
+    // 샘플러 통과 기본값: base + capture_rate 255 → 첫 채택(테스트 rng 재생 단순화)
+    func speciesInfo(_ id: Int) async throws -> SpeciesInfo { SpeciesInfo(captureRate: 255, isBase: true) }
+}
+
+private enum PokeStubError: Error { case boom }
+
+/// 샘플러 테스트용 — id 별 SpeciesInfo 테이블 + 요청 id 그대로의 무진화 라인 반환.
+final class TableProvider: PokeProviding, @unchecked Sendable {
+    nonisolated(unsafe) var table: [Int: SpeciesInfo] = [:]
+    nonisolated(unsafe) var defaultInfo = SpeciesInfo(captureRate: 255, isBase: true)
+    nonisolated(unsafe) var failAll = false
+    func line(baseSpeciesID: Int) async throws -> EvoLine {
+        makeLine(base: baseSpeciesID, tree: node(baseSpeciesID))
+    }
+    func speciesInfo(_ id: Int) async throws -> SpeciesInfo {
+        if failAll { throw PokeStubError.boom }
+        return table[id] ?? defaultInfo
+    }
 }
 
 private func allIDs(_ n: EvoNode) -> [Int] { [n.speciesID] + n.children.flatMap(allIDs) }
@@ -310,6 +289,7 @@ final class DexSortingTests: XCTestCase {
 private final class MutableProvider: PokeProviding, @unchecked Sendable {
     nonisolated(unsafe) var line: EvoLine = makeLine(base: 1, tree: node(1))
     func line(baseSpeciesID: Int) async throws -> EvoLine { line }
+    func speciesInfo(_ id: Int) async throws -> SpeciesInfo { SpeciesInfo(captureRate: 255, isBase: true) }
 }
 
 // MARK: 개체 아이덴티티 (shiny / nature) — v2.2.0
@@ -432,7 +412,8 @@ final class CompanionIdentityTests: XCTestCase {
         // hatchIfNeeded 경로: chooseBase(1) → shiny(2) → nature(3) 순 rng 소비. shiny 시드 탐색.
         func rollsShinyViaHatchIfNeeded(_ seed: UInt64) -> Bool {
             var r = SeededRNG(seed: seed)
-            _ = r.next()   // chooseBase
+            _ = r.next()   // chooseBase: id 롤
+            _ = r.next()   // chooseBase: capture 채택 롤(스텁 255 → 항상 통과)
             return r.next() % PokemonOdds.shinyDenominator == 0
         }
         var seed: UInt64?
@@ -459,6 +440,84 @@ final class CompanionIdentityTests: XCTestCase {
         XCTAssertNil(s.state.active, "즉시 졸업")
         XCTAssertEqual(s.state.dex.count, 1)
         XCTAssertNil(s.celebration, "떠난 mon 의 hatch 연출을 재생하면 안 된다")
+    }
+
+    // MARK: 부화 샘플러 (PokéAPI rejection sampling — 하드코딩 풀 대체)
+
+    private func samplerStore(_ provider: any PokeProviding, seed: UInt64,
+                              preloadState: CompanionState? = nil) -> CompanionStore {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("poke-\(UUID().uuidString).json")
+        if let st = preloadState, let data = try? JSONEncoder().encode(st) { try? data.write(to: url) }
+        return CompanionStore(provider: provider, clock: { fixedNow }, fileURL: url, rng: SeededRNG(seed: seed))
+    }
+
+    /// 알을 임계 이상으로 채운 상태(installBaseline 포함) — rng 미소비 경로.
+    private func eggReadyState(collected: Set<String> = []) -> CompanionState {
+        var st = CompanionState()
+        st.installBaselineSet = true
+        st.lastDate = "d1"
+        st.eggUsage = PokemonBalance.eggHatchThreshold + 1
+        st.collectedFinals = collected
+        return st
+    }
+
+    /// non-base 는 스킵되고 다음 base 후보가 채택된다 (id 롤 → base 판정 → capture 채택 재생).
+    func testSamplerSkipsNonBase() async {
+        let seed: UInt64 = 42
+        var r = SeededRNG(seed: seed)
+        let first = Int(r.next() % 649) + 1          // 시도1: id 롤 → non-base 로 마킹 → 스킵(추가 롤 없음)
+        let second = Int(r.next() % 649) + 1         // 시도2: id 롤 → base(기본) → capture 255 통과
+        let p = TableProvider()
+        p.table[first] = SpeciesInfo(captureRate: 255, isBase: false)
+        let s = samplerStore(p, seed: seed, preloadState: eggReadyState())
+        await s.hatchIfNeeded()
+        XCTAssertEqual(s.state.active?.baseID, second == first ? first : second)
+        XCTAssertNotEqual(s.state.active?.baseID, first)
+    }
+
+    /// capture_rate 가 낮으면(=희귀) 채택 확률이 낮다 — cr=1 후보는 1/255 를 빼면 스킵.
+    func testSamplerRejectsLowCaptureRate() async {
+        let seed: UInt64 = 7
+        var r = SeededRNG(seed: seed)
+        let first = Int(r.next() % 649) + 1
+        guard r.next() % 255 != 0 else { return }    // 1/255 극단 시드면 무의미 — 스킵
+        let p = TableProvider()
+        p.table[first] = SpeciesInfo(captureRate: 1, isBase: true)
+        let s = samplerStore(p, seed: seed, preloadState: eggReadyState())
+        await s.hatchIfNeeded()
+        XCTAssertNotNil(s.state.active)
+        XCTAssertNotEqual(s.state.active?.baseID, first, "cr=1 후보가 첫 롤에 붙으면 안 된다")
+    }
+
+    /// 이미 수집한 base 는 ½ 확률로만 채택 — 스킵 경로(half 롤=0) 시드에서 다음 후보가 뽑힌다.
+    func testSamplerHalvesCollectedBase() async {
+        var found: (seed: UInt64, first: Int, second: Int)?
+        for seed: UInt64 in 0..<5000 {
+            var r = SeededRNG(seed: seed)
+            let first = Int(r.next() % 649) + 1
+            _ = r.next()                              // capture 롤(기본 255 → 통과)
+            guard r.next() % 2 == 0 else { continue } // 수집済 ½ 롤 → 스킵 경로
+            let second = Int(r.next() % 649) + 1
+            guard second != first else { continue }
+            found = (seed, first, second); break
+        }
+        guard let c = found else { return XCTFail("시드 탐색 실패") }
+        let p = TableProvider()
+        let s = samplerStore(p, seed: c.seed,
+                             preloadState: eggReadyState(collected: ["\(c.first):\(c.first)"]))
+        await s.hatchIfNeeded()
+        XCTAssertEqual(s.state.active?.baseID, c.second, "수집済 base 는 ½ 롤로 스킵돼야 한다")
+    }
+
+    /// 오프라인(전부 실패) — 알 진행 보존, isHatching 해제, 다음 틱 재시도 가능.
+    func testSamplerOfflineKeepsEgg() async {
+        let p = TableProvider()
+        p.failAll = true
+        let s = samplerStore(p, seed: 1, preloadState: eggReadyState())
+        await s.hatchIfNeeded()
+        XCTAssertNil(s.state.active)
+        XCTAssertGreaterThanOrEqual(s.state.eggUsage, PokemonBalance.eggHatchThreshold, "알 진행 보존")
+        XCTAssertFalse(s.isHatching)
     }
 
     /// 스프라이트 캐시 키 — 기존 키("25-a"/"25-s") 불변 + shiny 접두.
