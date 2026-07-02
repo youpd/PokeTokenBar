@@ -100,11 +100,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 정적 스프라이트로 먼저 보여주고, animated GIF 가 받아지면 교체한다(메뉴바도 GIF로 움직임).
     /// 에너지 통제는 ① delay 하한 0.2s(≈5fps) ② 안 보이면 정지(menuShouldAnimate) ③ 저전력 모드
     /// 에선 GIF 생략(가벼운 bob)로 처리한다 — 통제된 저프레임 + 비가시 시 정지로 저전력.
-    private func ensureMenuAnimation(forceRebuild: Bool = false) {
+    private func ensureMenuAnimation() {
         let id = companion.currentSpeciesID
         let shiny = companion.currentIsShiny
         let key = id.map { "\($0)-\(shiny)" }
-        if !forceRebuild, key == menuSpriteKey, !menuFrames.isEmpty { return }   // 이미 이 개체로 애니메이션 중
+        if key == menuSpriteKey, !menuFrames.isEmpty { return }   // 이미 이 개체로 애니메이션 중
         menuSpriteKey = key
         menuLoadGen += 1
         let gen = menuLoadGen

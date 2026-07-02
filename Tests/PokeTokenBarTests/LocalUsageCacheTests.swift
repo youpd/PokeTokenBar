@@ -95,7 +95,9 @@ final class LocalUsageCacheTests: XCTestCase {
         let entries = await cache.claudeEntries(modifiedSince: since)
         XCTAssertEqual(Set(entries.map(\.output)), [1, 2], "조회 자체는 둘 다 반환")
 
-        let snap = try String(contentsOf: cacheFile, encoding: .utf8)
+        let raw = try Data(contentsOf: cacheFile)
+        let plain = (try? (raw as NSData).decompressed(using: .zlib) as Data) ?? raw
+        let snap = String(decoding: plain, as: UTF8.self)
         XCTAssertFalse(snap.contains("old.jsonl"), "45일 지난 blob 은 스냅샷에서 prune")
         XCTAssertTrue(snap.contains("new.jsonl"))
     }
@@ -129,6 +131,33 @@ final class LocalUsageCacheTests: XCTestCase {
         let cache = makeCache()
         let entries = await cache.claudeEntries(modifiedSince: Date().addingTimeInterval(-86400))
         XCTAssertEqual(entries.map(\.output), [2])
+    }
+
+    /// 구버전 평문 JSON 캐시(압축 도입 전)도 로드된다 — 업그레이드 시 콜드 스타트 재발 방지.
+    func testLegacyPlainJSONCacheLoads() async throws {
+        let t = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 3600)
+        try writeFile("a.jsonl", lines: [claudeLine(id: "1", output: 42)], mtime: t)
+        _ = await makeCache().claudeEntries(modifiedSince: since)   // 압축 스냅샷 저장
+
+        // 압축 해제해 평문으로 다운그레이드(구버전 캐시 파일 시뮬레이션)
+        let raw = try Data(contentsOf: cacheFile)
+        let plain = try (raw as NSData).decompressed(using: .zlib) as Data
+        try plain.write(to: cacheFile)
+
+        // 내용을 몰래 바꿔도(길이·mtime 동일) 평문 스냅샷이 로드되면 42 유지
+        try writeFile("a.jsonl", lines: [claudeLine(id: "1", output: 43)], mtime: t)
+        let entries = await makeCache().claudeEntries(modifiedSince: since)
+        XCTAssertEqual(entries.map(\.output), [42], "평문(구버전) 캐시가 로드돼야 한다")
+    }
+
+    /// 압축 저장 — 스냅샷이 실제로 zlib 이고 평문 대비 작다.
+    func testSnapshotIsCompressed() async throws {
+        let t = Date(timeIntervalSince1970: floor(Date().timeIntervalSince1970) - 3600)
+        try writeFile("a.jsonl", lines: (1...50).map { claudeLine(id: "\($0)", output: $0) }, mtime: t)
+        _ = await makeCache().claudeEntries(modifiedSince: since)
+        let raw = try Data(contentsOf: cacheFile)
+        let plain = try (raw as NSData).decompressed(using: .zlib) as Data   // zlib 아니면 throw
+        XCTAssertLessThan(raw.count, plain.count, "압축본이 평문보다 작아야 한다")
     }
 
     /// 포매터 — grouped/cost/costCompact 경계값(메뉴바·팝오버 표기 계약).
