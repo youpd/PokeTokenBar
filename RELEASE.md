@@ -30,6 +30,17 @@ PTB_NOTES_FILE=/tmp/notes.md ./scripts/release.sh 2.1.1
 
 검토만 하려면: `./scripts/release.sh --check-only`
 
+## E2E 스모크 (선택 — GUI 세션 필요)
+
+```bash
+./scripts/e2e.sh
+```
+
+실제 앱 번들로 빌드→기동→데이터 파이프라인(스냅샷 갱신·구조 검증·AppLog)→메뉴바
+status item(AX)→팝오버 오픈(AXPress)까지 7개 체크. 5단계는 터미널에 손쉬운 사용
+(Accessibility) 권한 필요 — 미허용이면 해당 단계만 SKIP. release.sh 에 포함하지 않는
+이유: GUI 세션·권한 의존이라 헤드리스 실행이 깨질 수 있음. 릴리스 전 수동 1회 권장.
+
 ## 문서 검토 체크리스트 (내용 변경 시)
 
 `release.sh` 2단계가 출력하는 것 — **기능/동작이 바뀐 릴리스면 반드시 갱신**:
