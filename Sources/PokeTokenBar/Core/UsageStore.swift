@@ -95,10 +95,6 @@ final class UsageStore {
         return snapshots.reduce(0) { $0 + ($1.today?.date == todayKey ? $1.todayTotalTokens : 0) }
     }
 
-    var hasAnyLimits: Bool {
-        limits != nil || codexLimits?.hasVisibleLimit == true
-    }
-
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 

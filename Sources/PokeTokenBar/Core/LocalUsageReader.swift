@@ -48,7 +48,7 @@ enum LocalUsageReader {
     // MARK: 스캔 (mtime 윈도우)
 
     /// `root` 하위(재귀)의 `.jsonl` 파일 중 `modifiedSince` 이후 수정된 것.
-    static func jsonlFiles(in root: URL, modifiedSince: Date) -> [URL] {
+    static func jsonlFiles(in root: URL, modifiedSince: Date, allowJSON: Bool = false) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(
             at: root,
@@ -56,8 +56,8 @@ enum LocalUsageReader {
             options: [.skipsHiddenFiles]) else { return [] }
         var out: [URL] = []
         for case let url as URL in en {
-            // .jsonl(Claude/Codex/Gemini 신규) + .json(Gemini 레거시 세션)
-            guard url.pathExtension == "jsonl" || url.pathExtension == "json" else { continue }
+            // 기본 .jsonl. .json 은 Gemini 전용(allowJSON) — Claude 루트 .meta.json 스캔 방지.
+            guard url.pathExtension == "jsonl" || (allowJSON && url.pathExtension == "json") else { continue }
             let v = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             if let m = v?.contentModificationDate, m >= modifiedSince { out.append(url) }
         }
@@ -223,7 +223,7 @@ enum LocalUsageReader {
     static func geminiEntries(modifiedSince: Date, root: URL? = nil) -> [Entry] {
         let fmt = localDayFormatter()
         var entries: [Entry] = []
-        for file in jsonlFiles(in: root ?? geminiTmpDir, modifiedSince: modifiedSince) {
+        for file in jsonlFiles(in: root ?? geminiTmpDir, modifiedSince: modifiedSince, allowJSON: true) {
             entries.append(contentsOf: parseGeminiFile(file, fmt: fmt))
         }
         return entries

@@ -82,7 +82,8 @@ actor LocalUsageCache {
     func geminiEntries(modifiedSince: Date) -> [LocalUsageReader.Entry] {
         ensureLoaded()
         let fmt = LocalUsageReader.localDayFormatter()
-        let r = collect(root: geminiRoot ?? LocalUsageReader.geminiTmpDir, since: modifiedSince, cache: &geminiCache) {
+        let r = collect(root: geminiRoot ?? LocalUsageReader.geminiTmpDir, since: modifiedSince,
+                        cache: &geminiCache, allowJSON: true) {
             LocalUsageReader.parseGeminiFile($0, fmt: fmt)
         }
         saveIfNeeded()
@@ -90,6 +91,7 @@ actor LocalUsageCache {
     }
 
     private func collect(root: URL, since: Date, cache: inout [String: Blob],
+                         allowJSON: Bool = false,
                          parse: (URL) -> [LocalUsageReader.Entry]) -> [LocalUsageReader.Entry] {
         let fm = FileManager.default
         guard let en = fm.enumerator(
@@ -98,8 +100,9 @@ actor LocalUsageCache {
             options: [.skipsHiddenFiles]) else { return [] }
         var result: [LocalUsageReader.Entry] = []
         for case let url as URL in en {
-            // .jsonl(Claude/Codex/Gemini 신규) + .json(Gemini 레거시 세션)
-            guard url.pathExtension == "jsonl" || url.pathExtension == "json" else { continue }
+            // 기본 .jsonl. .json 은 Gemini 루트에서만(allowJSON) — Claude 루트의 대량
+            // .meta.json 등을 스캔/빈 blob 으로 캐시하지 않도록 스코프 제한.
+            guard url.pathExtension == "jsonl" || (allowJSON && url.pathExtension == "json") else { continue }
             guard let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
                   let mtime = v.contentModificationDate, mtime >= since else { continue }
             let size = v.fileSize ?? 0

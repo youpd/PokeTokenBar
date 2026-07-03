@@ -182,7 +182,7 @@ final class UsageStoreTests: XCTestCase {
         store.critThreshold = 95
         await store.refresh(scheduleEmptyRetry: false)
         XCTAssertTrue(store.isLimitWarning)
-        XCTAssertTrue(store.hasAnyLimits)
+        XCTAssertNotNil(store.limits, "한도가 로드돼야 한다")
     }
 
     func testNoLimitWarningWhenUnderCritical() async {
