@@ -143,6 +143,11 @@ final class CompanionStore {
         }
         // 이벤트 만료
         if let until = eventUntil, clock() > until { justGraduated = nil; eventUntil = nil }
+        // 알 상태 프리패칭 — 종 pre-roll + 라인/스프라이트 예열(부화 순간 딜레이 제거).
+        // 성공할 때까지 매 update 틱마다 재시도(성공 후엔 no-op).
+        if state.active == nil, state.installBaselineSet, !isHatching {
+            Task { await ensureEggPrefetch() }
+        }
         // 알이 부화 임계에 도달하면 부화
         if state.active == nil, state.eggUsage >= PokemonBalance.eggHatchThreshold, !isHatching {
             Task { await hatchIfNeeded() }
@@ -208,6 +213,8 @@ final class CompanionStore {
         state.active = nil
         currentLine = nil
         state.eggUsage = 0   // 새 알은 처음부터 인큐베이션
+        // "알을 받는 순간" 즉시 프리패칭 시작 — 다음 부화의 종·라인·스프라이트 예열.
+        Task { await self.ensureEggPrefetch() }
     }
 
     /// companion 이벤트 시스템 알림(.app + 토글 ON 일 때만). 한도 알림과 독립.
@@ -228,7 +235,53 @@ final class CompanionStore {
 
     func hatchIfNeeded() async {
         guard state.active == nil, !isHatching, state.eggUsage >= PokemonBalance.eggHatchThreshold else { return }
-        await hatch(baseID: chooseBase())
+        // 프리패치가 "종 롤 중"(pending 미확정)일 때만 대기 — 이중 rng 소비 방지.
+        // pending 확정 후의 예열(라인/스프라이트)과는 동시 진행해도 안전하다.
+        guard state.pendingHatchID != nil || !prefetchInFlight else { return }
+        // 샘플링(네트워크) 동안 중복 진입 차단 — hatch() 자체 가드와 별개.
+        isHatching = true
+        // 프리패칭된 종이 있으면 그대로 사용(라인·스프라이트 예열됨 → 딜레이 ~0), 없으면 지금 롤.
+        let base: Int?
+        if let pending = state.pendingHatchID {
+            base = pending
+        } else {
+            base = await chooseBase()
+        }
+        isHatching = false
+        guard let base else { return }   // 네트워크 불안정 → 알 유지, 다음 update 틱에 재시도
+        state.pendingHatchID = nil
+        await hatch(baseID: base)
+    }
+
+    // MARK: 알 프리패칭
+
+    private var prefetchInFlight = false
+    private var prefetchedLineID: Int?   // 라인·스프라이트 예열 완료한 종(세션 메모리)
+
+    /// 알 상태에서 부화를 미리 준비 — ① 종 pre-roll(pendingHatchID, 영속) ② 진화 라인
+    /// fetch(provider 캐시 적재) ③ 스프라이트 예열(정적+애니메이션+shiny 애니메이션).
+    /// 전부 성공하면 부화 순간 네트워크 0. 실패 지점부터 다음 update 틱에 이어서 재시도.
+    private func ensureEggPrefetch() async {
+        guard state.active == nil, !isHatching, !prefetchInFlight else { return }
+        prefetchInFlight = true
+        defer { prefetchInFlight = false }
+
+        if state.pendingHatchID == nil {
+            guard let id = await chooseBase() else { return }   // 오프라인 → 다음 틱 재시도
+            guard state.active == nil else { return }           // await 사이 부화 완료 케이스 방어
+            state.pendingHatchID = id
+            save()
+        }
+        guard let id = state.pendingHatchID, prefetchedLineID != id else { return }
+        guard let line = try? await provider.line(baseSpeciesID: id) else { return }   // 라인 예열
+        // 스프라이트 예열 — 부화 직후 보일 것들: base 정적+애니메이션, shiny 롤(1/64) 대비 shiny 애니메이션.
+        // .app 번들에서만(단위 테스트가 실네트워크에 닿지 않도록 — 알림과 동일한 게이트).
+        if Bundle.main.bundlePath.hasSuffix(".app") {
+            _ = await SpriteStore.shared.data(speciesID: line.baseID, animated: false, shiny: false)
+            _ = await SpriteStore.shared.data(speciesID: line.baseID, animated: true, shiny: false)
+            _ = await SpriteStore.shared.data(speciesID: line.baseID, animated: true, shiny: true)
+        }
+        prefetchedLineID = id
     }
 
     func hatch(baseID: Int) async {
@@ -268,8 +321,25 @@ final class CompanionStore {
         }
     }
 
-    private func chooseBase() -> Int {
-        PokemonPool.pick(roll: Int(rng.next() % UInt64(PokemonPool.totalWeight)))
+    /// 부화 종 선정 — 하드코딩 풀 없이 PokéAPI 1~5세대 base 전체(329종)에서 가중 선택.
+    ///   ① base 인덱스(id + capture_rate)를 GraphQL 1쿼리로 취득(30일 디스크 캐시 → 보통 0콜)
+    ///   ② 가중치 = 공식 capture_rate 그대로(캐터피 255 vs 뮤츠 3 = 85:1, 전설군 ≈ 0.77%)
+    ///      단, 이미 수집한 base 는 가중치 ½(미수집 부스트 — 재부화/shiny 사냥은 열어둠)
+    ///   ③ 누적 가중치에서 정확히 1롤 — 루프/재롤 없음, 시간 상한 확정적
+    /// 인덱스 취득 실패(오프라인 + 캐시 없음) 시 nil → 알 유지, 다음 갱신 틱 재시도.
+    private func chooseBase() async -> Int? {
+        guard let index = try? await provider.baseSpeciesIndex(), !index.isEmpty else { return nil }
+        let weights = index.map { e in
+            state.collectedFinals.contains(where: { $0.hasPrefix("\(e.id):") })
+                ? max(1, e.captureRate / 2) : max(1, e.captureRate)
+        }
+        let total = weights.reduce(0, +)
+        var r = Int(rng.next() % UInt64(total))
+        for (i, w) in weights.enumerated() {
+            r -= w
+            if r < 0 { return index[i].id }
+        }
+        return index.last?.id   // 도달 불가(방어)
     }
 
     private func computeState(burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool, today: Int) -> CompanionStateKind {

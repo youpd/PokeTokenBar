@@ -228,6 +228,8 @@ struct CompanionState: Codable, Sendable {
     var usedSinceInstall = 0
     // 현재 알이 생긴 뒤 쓴 토큰(부화 인큐베이션). 누적(usedSinceInstall)과 별개 — 졸업 후 새 알마다 0.
     var eggUsage = 0
+    // 알 상태에서 미리 롤해둔 부화 종(프리패칭) — 부화 순간 네트워크 딜레이 제거. 재시작에도 유지.
+    var pendingHatchID: Int?
     var claimedTodayTokens = 0
     var lastDate = ""
     // 현재 포켓몬(없으면 알)
@@ -246,6 +248,7 @@ struct CompanionState: Codable, Sendable {
         installBaselineSet = try c.decodeIfPresent(Bool.self, forKey: .installBaselineSet) ?? false
         usedSinceInstall = try c.decodeIfPresent(Int.self, forKey: .usedSinceInstall) ?? 0
         eggUsage = try c.decodeIfPresent(Int.self, forKey: .eggUsage) ?? 0
+        pendingHatchID = try c.decodeIfPresent(Int.self, forKey: .pendingHatchID)
         claimedTodayTokens = try c.decodeIfPresent(Int.self, forKey: .claimedTodayTokens) ?? 0
         lastDate = try c.decodeIfPresent(String.self, forKey: .lastDate) ?? ""
         active = try c.decodeIfPresent(MonState.self, forKey: .active)
@@ -255,42 +258,5 @@ struct CompanionState: Codable, Sendable {
     }
 }
 
-/// 부화 후보 base 종 — (PokéAPI 식별자, 선택 가중 tier). 3단/2단/무진화/분기 골고루.
-/// tier 는 *선택 확률*만 결정하는 큐레이트 값 — 표시/경제 희귀도는 PokéAPI capture_rate
-/// 에서 별도 파생(EvoLine.rarity, 권위 소스)하며 보통 일치한다.
-enum PokemonPool {
-    static let entries: [(id: Int, tier: Rarity)] = [
-        // common — 흔하게 부화
-        (10, .common), (16, .common), (172, .common), (129, .common),
-        (66, .common), (92, .common), (280, .common), (304, .common),
-        // uncommon
-        (446, .uncommon),
-        // rare — 스타터/이브이 등
-        (1, .rare), (4, .rare), (7, .rare), (133, .rare),
-        (128, .rare), (131, .rare), (252, .rare),
-        // legendary — 드물게
-        (144, .legendary),
-    ]
-
-    /// tier 별 선택 가중치(엔트리당). 희귀할수록 작다 → 부화 확률 낮음.
-    static func weight(_ tier: Rarity) -> Int {
-        switch tier {
-        case .common:    return 8
-        case .uncommon:  return 4
-        case .rare:      return 2
-        case .legendary: return 1
-        }
-    }
-
-    static var totalWeight: Int { entries.reduce(0) { $0 + weight($1.tier) } }
-
-    /// 0..<totalWeight 범위 난수로 가중 선택 → base id.
-    static func pick(roll: Int) -> Int {
-        var r = roll % max(1, totalWeight)
-        for e in entries {
-            r -= weight(e.tier)
-            if r < 0 { return e.id }
-        }
-        return entries[0].id
-    }
-}
+// NOTE: 부화 후보는 더 이상 하드코딩하지 않는다 — CompanionStore.chooseBase() 가
+// PokéAPI 전수(1~5세대)를 capture_rate 가중 rejection sampling 으로 선정한다.
