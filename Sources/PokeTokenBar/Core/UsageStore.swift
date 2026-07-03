@@ -123,6 +123,12 @@ final class UsageStore {
         return snapshots.reduce(0) { $0 + ($1.today?.date == todayKey ? ($1.today?.totalCost ?? 0) : 0) }
     }
 
+    /// 프로바이더 탭 선택 해석 — 선호 id 가 연결돼 있으면 그것, 아니면(첫 실행/연결 해제) 첫 번째.
+    func snapshot(preferring id: String?) -> ProviderSnapshot? {
+        if let id, let s = snapshots.first(where: { $0.providerID == id }) { return s }
+        return snapshots.first
+    }
+
     var weekTotalTokens: Int { snapshots.reduce(0) { $0 + ($1.weekTotal?.totalTokens ?? 0) } }
     var weekCostTotal: Double { snapshots.reduce(0) { $0 + ($1.weekTotal?.totalCost ?? 0) } }
     var monthTotalTokens: Int { snapshots.reduce(0) { $0 + ($1.monthTotal?.totalTokens ?? 0) } }
@@ -193,7 +199,7 @@ final class UsageStore {
 
     // MARK: 생명주기
 
-    init(providers: [any UsageProvider] = [LocalClaudeProvider(), LocalCodexProvider()],
+    init(providers: [any UsageProvider] = [LocalClaudeProvider(), LocalCodexProvider(), LocalGeminiProvider()],
          claudeLimitsProvider: any ClaudeLimitsProviding = OAuthLimitsProvider(),
          codexLimitsProvider: any CodexLimitsProviding = CodexRateLimitsProvider(),
          autoRefresh: Bool = true,

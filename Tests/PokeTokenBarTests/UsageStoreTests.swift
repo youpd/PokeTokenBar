@@ -242,6 +242,18 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertFalse(store.isStale)
     }
 
+    // MARK: 프로바이더 탭 선택 해석
+
+    func testSnapshotPreferringSelection() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(1_000))
+        let gemini = FakeUsageProvider(id: "gemini", displayName: "Gemini", daily: todayDaily(2_000))
+        let store = makeStore(providers: [claude, gemini])
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertEqual(store.snapshot(preferring: "gemini")?.providerID, "gemini")
+        XCTAssertEqual(store.snapshot(preferring: nil)?.providerID, "claude_code", "선호 없음 → 첫 번째")
+        XCTAssertEqual(store.snapshot(preferring: "cursor")?.providerID, "claude_code", "미연결 id → 첫 번째 폴백")
+    }
+
     // MARK: 주/월 누적 유지 (팝오버 깜빡임 회귀 방지)
 
     /// phase1 재빌드가 이전 스냅샷의 주/월 누적을 이어받지 않으면, 다음 enrichment 가

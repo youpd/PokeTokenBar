@@ -16,9 +16,9 @@
 
 </div>
 
-PokeTokenBar shows how many AI coding tokens you've burned today — Claude Code & Codex — in your macOS menu bar, and turns that usage into a growing **Pokémon companion**. Spend tokens, hatch an egg, evolve it through its real evolution line, graduate it into your Pokédex, and start again.
+PokeTokenBar shows how many AI coding tokens you've burned today — Claude Code, Codex & Gemini CLI — in your macOS menu bar, and turns that usage into a growing **Pokémon companion**. Spend tokens, hatch an egg, evolve it through its real evolution line, graduate it into your Pokédex, and start again.
 
-> Token usage is read directly from your local Claude Code & Codex logs (`totalTokens` = input + output + cache, local date) — no external CLI needed. Unofficial, non-commercial Pokémon fan project — see [License & disclaimer](#license--disclaimer).
+> Token usage is read directly from your local Claude Code, Codex & Gemini CLI logs (`totalTokens` = input + output + cache, local date) — no external CLI needed. Unofficial, non-commercial Pokémon fan project — see [License & disclaimer](#license--disclaimer).
 
 ## Why
 
@@ -32,7 +32,7 @@ PokeTokenBar shows how many AI coding tokens you've burned today — Claude Code
 
 ## How it works
 
-1. 🥚 **Code as usual.** The tokens you burn in Claude Code & Codex incubate an egg — nothing extra to run.
+1. 🥚 **Code as usual.** The tokens you burn in Claude Code, Codex & Gemini CLI incubate an egg — nothing extra to run.
 2. 🐣 **Hatch.** Eggs hatch into Pokémon with real evolution lines from [PokéAPI](https://pokeapi.co/) — any Gen 1–5 line (329 possible starts), weighted by the official capture rate: commons hatch often, a legendary is a 1-in-129 event. Every hatch rolls one of 25 natures — and **1 in 64 is ✨ shiny**.
 3. ⚡ **Evolve.** Keep coding and it grows through its actual evolution tree (1/2/3 stages, branching), with a little flash celebration at each step.
 4. 🎓 **Graduate & collect.** Final form + threshold sends it to your **Pokédex** — rarer takes longer (≈3 days common → ≈24 days legendary at heavy use) — and a fresh egg arrives.
@@ -80,7 +80,7 @@ Menu-bar items, refresh interval (1–15 min or manual), launch at login, a Keyc
 
 ### Requirements
 
-macOS 14+ (Apple Silicon or Intel). That's it — token usage is read directly from your local Claude Code / Codex logs, no external CLI required.
+macOS 14+ (Apple Silicon or Intel). That's it — token usage is read directly from your local Claude Code / Codex / Gemini CLI logs, no external CLI required.
 
 ### Homebrew
 
@@ -103,6 +103,7 @@ swift test                   # unit tests
 | Source | Used for | Notes |
 |---|---|---|
 | `~/.claude/projects/**/*.jsonl` | Claude Code daily/blocks/weekly/monthly | read directly; deduped by message id; cached incrementally |
+| `~/.gemini/tmp/**/chats/*.json(l)` | Gemini CLI daily/monthly | session records (`tokens` per message); weekly = daily sum |
 | `~/.codex/sessions/**/*.jsonl` | Codex daily/monthly | `token_count` events; weekly = daily sum |
 | Keychain → `oauth/usage` | Claude official 5h/weekly % | unofficial endpoint; single Keychain prompt, then cached |
 | `codex app-server` | Codex official 5h/weekly % | account snapshot only; no model turn |
@@ -110,7 +111,7 @@ swift test                   # unit tests
 
 ## Privacy & permissions
 
-- **On-device.** Token usage is read directly from your local Claude Code / Codex logs; the app never runs `claude`/`codex` model turns, only reads usage.
+- **On-device.** Token usage is read directly from your local Claude Code / Codex / Gemini CLI logs; the app never runs `claude`/`codex` model turns, only reads usage.
 - **Keychain (optional).** To show official limits it reads the Claude OAuth credential **once** (a single password prompt), then caches it in the app's own Keychain item for reuse. Turn it off in Settings — the limits section simply hides.
 - **Pokémon assets** are fetched at runtime from PokéAPI and cached only under `~/Library/Application Support/PokeTokenBar/`. Nothing copyrighted is bundled in this repository or its releases.
 

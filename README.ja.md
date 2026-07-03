@@ -16,9 +16,9 @@
 
 </div>
 
-PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code・Codex）を macOS メニューバーに表示し、その使用量を育っていく **ポケモンのパートナー** に変えます。トークンを使うとタマゴが孵化し、実際の進化ラインに沿って進化し、最終進化後に図鑑へ卒業して、また新しいタマゴが始まります。
+PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code・Codex・Gemini CLI）を macOS メニューバーに表示し、その使用量を育っていく **ポケモンのパートナー** に変えます。トークンを使うとタマゴが孵化し、実際の進化ラインに沿って進化し、最終進化後に図鑑へ卒業して、また新しいタマゴが始まります。
 
-> トークン使用量はローカルの Claude Code・Codex ログから直接読み取ります（`totalTokens` = input + output + cache、ローカル日付）— 外部 CLI 不要。非公式・非商用のポケモンファンプロジェクトです — [ライセンス & 免責](#ライセンス--免責) を参照。
+> トークン使用量はローカルの Claude Code・Codex・Gemini CLI ログから直接読み取ります（`totalTokens` = input + output + cache、ローカル日付）— 外部 CLI 不要。非公式・非商用のポケモンファンプロジェクトです — [ライセンス & 免責](#ライセンス--免責) を参照。
 
 ## なぜ
 
@@ -32,7 +32,7 @@ PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code
 
 ## しくみ
 
-1. 🥚 **いつも通りコーディング。** Claude Code・Codex で使うトークンがタマゴを温めます — 追加の設定は不要。
+1. 🥚 **いつも通りコーディング。** Claude Code・Codex・Gemini CLI で使うトークンがタマゴを温めます — 追加の設定は不要。
 2. 🐣 **孵化。** [PokéAPI](https://pokeapi.co/) の**第1〜5世代すべての進化系統（起点329種）**から、公式の捕獲率で重み付けされて生まれます — よくいるポケモンは頻繁に、伝説は129回に1回。孵化ごとに25種類のせいかくがひとつ決まり — **64匹に1匹は ✨ 色違い**。
 3. ⚡ **進化。** コーディングを続けると実際の進化ツリー（1/2/3段階、分岐）に沿って育ち、各段階で小さな演出が流れます。
 4. 🎓 **卒業 & 収集。** 最終進化 + 閾値で **図鑑** に保存されます — レアなほど時間がかかり（ヘビーユーザーで common ≈3日 → legendary ≈24日）— 新しいタマゴが届きます。
@@ -80,7 +80,7 @@ PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code
 
 ### 必要条件
 
-macOS 14+（Apple Silicon または Intel）。それだけ — トークン使用量はローカルの Claude Code / Codex ログから直接読み取り、外部 CLI は不要です。
+macOS 14+（Apple Silicon または Intel）。それだけ — トークン使用量はローカルの Claude Code / Codex / Gemini CLI ログから直接読み取り、外部 CLI は不要です。
 
 ### Homebrew
 
@@ -103,6 +103,7 @@ swift test                   # ユニットテスト
 | ソース | 用途 | 備考 |
 |---|---|---|
 | `~/.claude/projects/**/*.jsonl` | Claude Code daily/blocks/weekly/monthly | 直接読み取り；メッセージ id で重複排除；増分キャッシュ |
+| `~/.gemini/tmp/**/chats/*.json(l)` | Gemini CLI daily/monthly | セッションレコード（メッセージ別 `tokens`）；週間 = daily 合算 |
 | `~/.codex/sessions/**/*.jsonl` | Codex daily/monthly | `token_count` イベント；週間 = daily 合算 |
 | Keychain → `oauth/usage` | Claude 公式 5h/週間 % | 非公式 endpoint；Keychain プロンプト1回後にキャッシュ |
 | `codex app-server` | Codex 公式 5h/週間 % | アカウント snapshot のみ；モデル turn なし |
@@ -110,7 +111,7 @@ swift test                   # ユニットテスト
 
 ## プライバシー & 権限
 
-- **オンデバイス。** トークン使用量はローカルの Claude Code / Codex ログから直接読み取り、アプリは `claude`/`codex` のモデル turn を実行せず、使用量のみ読み取ります。
+- **オンデバイス。** トークン使用量はローカルの Claude Code / Codex / Gemini CLI ログから直接読み取り、アプリは `claude`/`codex` のモデル turn を実行せず、使用量のみ読み取ります。
 - **Keychain（任意）。** 公式の上限を表示するため、Claude OAuth 資格情報を **1回**（パスワードのプロンプト1回）読み取り、アプリ自身の Keychain 項目にキャッシュして再利用します。設定でオフにすると上限セクションが非表示になります。
 - **ポケモンのアセット** はランタイムに PokéAPI から取得し、`~/Library/Application Support/PokeTokenBar/` にのみキャッシュされます。著作物はこのリポジトリやリリースにバンドルしません。
 

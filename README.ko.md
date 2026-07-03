@@ -16,9 +16,9 @@
 
 </div>
 
-PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex)을 macOS 메뉴바에 보여주고, 그 사용량을 자라나는 **포켓몬 companion**으로 바꿔줍니다. 토큰을 쓰면 알이 부화하고, 실제 진화 라인을 따라 진화하며, 최종 진화 후 도감에 졸업하고, 다시 새 알이 시작됩니다.
+PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex · Gemini CLI)을 macOS 메뉴바에 보여주고, 그 사용량을 자라나는 **포켓몬 companion**으로 바꿔줍니다. 토큰을 쓰면 알이 부화하고, 실제 진화 라인을 따라 진화하며, 최종 진화 후 도감에 졸업하고, 다시 새 알이 시작됩니다.
 
-> 토큰 사용량은 로컬 Claude Code·Codex 로그에서 직접 읽습니다(`totalTokens` = input + output + cache, 로컬 날짜) — 외부 CLI 불필요. 비공식·비상업 포켓몬 팬 프로젝트 — [라이선스 & 면책](#라이선스--면책) 참고.
+> 토큰 사용량은 로컬 Claude Code·Codex·Gemini CLI 로그에서 직접 읽습니다(`totalTokens` = input + output + cache, 로컬 날짜) — 외부 CLI 불필요. 비공식·비상업 포켓몬 팬 프로젝트 — [라이선스 & 면책](#라이선스--면책) 참고.
 
 ## 왜
 
@@ -32,7 +32,7 @@ PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex)을 macOS
 
 ## 어떻게 자라나요
 
-1. 🥚 **평소처럼 코딩하세요.** Claude Code·Codex 에서 태우는 토큰이 알을 품습니다 — 따로 돌릴 건 없어요.
+1. 🥚 **평소처럼 코딩하세요.** Claude Code·Codex·Gemini CLI 에서 태우는 토큰이 알을 품습니다 — 따로 돌릴 건 없어요.
 2. 🐣 **부화.** [PokéAPI](https://pokeapi.co/)의 **1~5세대 모든 진화 계보(시작점 329종)**에서 공식 capture rate 가중으로 태어납니다 — 흔한 포켓몬은 자주, 전설은 부화 129번에 1번. 부화마다 25종 성격 중 하나가 정해지고 — **64마리 중 1마리는 ✨ 색이 다릅니다**.
 3. ⚡ **진화.** 계속 코딩하면 실제 진화 트리(1/2/3단, 분기)를 따라 자라고, 단계마다 작은 연출이 반겨줍니다.
 4. 🎓 **졸업 & 수집.** 최종 진화 + 임계 도달 시 **도감**에 보존됩니다 — 희귀할수록 오래 걸리고(헤비 유저 기준 common ≈3일 → legendary ≈24일) — 새 알이 도착합니다.
@@ -80,7 +80,7 @@ PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex)을 macOS
 
 ### 요구사항
 
-macOS 14+ (Apple Silicon 또는 Intel). 끝입니다 — 토큰 사용량은 로컬 Claude Code/Codex 로그에서 직접 읽으며 외부 CLI가 필요 없습니다.
+macOS 14+ (Apple Silicon 또는 Intel). 끝입니다 — 토큰 사용량은 로컬 Claude Code/Codex/Gemini CLI 로그에서 직접 읽으며 외부 CLI가 필요 없습니다.
 
 ### Homebrew
 
@@ -103,6 +103,7 @@ swift test                   # 단위 테스트
 | 소스 | 용도 | 비고 |
 |---|---|---|
 | `~/.claude/projects/**/*.jsonl` | Claude Code daily/blocks/weekly/monthly | 직접 읽음; 메시지 id 로 중복제거; 증분 캐시 |
+| `~/.gemini/tmp/**/chats/*.json(l)` | Gemini CLI daily/monthly | 세션 레코드(메시지별 `tokens`); 주간 = daily 합산 |
 | `~/.codex/sessions/**/*.jsonl` | Codex daily/monthly | `token_count` 이벤트; 주간 = daily 합산 |
 | Keychain → `oauth/usage` | Claude 공식 5h/주간 % | 비공식 endpoint; Keychain 프롬프트 1회 후 캐시 |
 | `codex app-server` | Codex 공식 5h/주간 % | 계정 snapshot만; 모델 turn 없음 |
@@ -110,7 +111,7 @@ swift test                   # 단위 테스트
 
 ## 프라이버시 & 권한
 
-- **온디바이스.** 토큰 사용량은 로컬 Claude Code/Codex 로그에서 직접 읽으며, 앱은 `claude`/`codex` 모델 turn을 실행하지 않고 사용량만 읽습니다.
+- **온디바이스.** 토큰 사용량은 로컬 Claude Code/Codex/Gemini CLI 로그에서 직접 읽으며, 앱은 `claude`/`codex` 모델 turn을 실행하지 않고 사용량만 읽습니다.
 - **Keychain(선택).** 공식 한도를 보여주려면 Claude OAuth 자격증명을 **1회**(비밀번호 프롬프트 1번) 읽고, 앱 자체 Keychain 항목에 캐시해 재사용합니다. 설정에서 끄면 한도 섹션만 숨겨집니다.
 - **포켓몬 에셋**은 런타임에 PokéAPI에서 받아오며 `~/Library/Application Support/PokeTokenBar/`에만 캐시됩니다. 저작물은 레포나 릴리스에 번들하지 않습니다.
 

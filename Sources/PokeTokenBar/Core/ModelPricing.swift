@@ -26,6 +26,10 @@ enum ModelPricing {
         "claude-haiku-4-5-20251001":  .perMillion(1, 5, 1.25, 0.1),
         "claude-fable-5":             .zero,                          // ccusage 미가격 → $0
         "gpt-5.5":                    .perMillion(5, 30, 0, 0.5),
+        // Gemini — 공식 API 단가(기본 티어, ≤200K 프롬프트). 캐시는 read 단가만(스토리지 시간요금 제외).
+        "gemini-2.5-pro":             .perMillion(1.25, 10, 0, 0.3125),
+        "gemini-2.5-flash":           .perMillion(0.30, 2.5, 0, 0.075),
+        "gemini-2.0-flash":           .perMillion(0.10, 0.4, 0, 0.025),
     ]
 
     /// 모델명 → 단가. 정확 매칭 우선, 없으면 패밀리(opus/sonnet/haiku/gpt) 폴백(버전 드리프트 대비),
@@ -38,6 +42,11 @@ enum ModelPricing {
         if m.contains("haiku")  { return .perMillion(1, 5, 1.25, 0.1) }
         if m.contains("gpt") || m.contains("codex") || m.contains("o4") || m.contains("o3") {
             return .perMillion(5, 30, 0, 0.5)
+        }
+        // Gemini 패밀리 폴백 — pro/flash 만(버전 드리프트 대비). 그 외 gemini 변형은 0(오표시 방지).
+        if m.hasPrefix("gemini") {
+            if m.contains("pro")   { return .perMillion(1.25, 10, 0, 0.3125) }
+            if m.contains("flash") { return .perMillion(0.30, 2.5, 0, 0.075) }
         }
         return .zero
     }

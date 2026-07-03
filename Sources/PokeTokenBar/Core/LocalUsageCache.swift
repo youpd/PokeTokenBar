@@ -9,10 +9,29 @@ actor LocalUsageCache {
     static let shared = LocalUsageCache()
 
     private struct Blob: Codable { let mtime: Date; let size: Int; let entries: [LocalUsageReader.Entry] }
-    private struct Snapshot: Codable { var claude: [String: Blob]; var codex: [String: Blob] }
+    private struct Snapshot: Codable {
+        var claude: [String: Blob]
+        var codex: [String: Blob]
+        var gemini: [String: Blob]
+
+        init(claude: [String: Blob], codex: [String: Blob], gemini: [String: Blob]) {
+            self.claude = claude
+            self.codex = codex
+            self.gemini = gemini
+        }
+
+        // 하위호환: gemini 키가 없는 구버전 스냅샷도 로드(콜드 스타트 재발 방지).
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: CodingKeys.self)
+            claude = try c.decodeIfPresent([String: Blob].self, forKey: .claude) ?? [:]
+            codex = try c.decodeIfPresent([String: Blob].self, forKey: .codex) ?? [:]
+            gemini = try c.decodeIfPresent([String: Blob].self, forKey: .gemini) ?? [:]
+        }
+    }
 
     private var claudeCache: [String: Blob] = [:]
     private var codexCache: [String: Blob] = [:]
+    private var geminiCache: [String: Blob] = [:]
     private var loaded = false
     private var dirty = false
     private var lastSave: Date?
@@ -20,13 +39,15 @@ actor LocalUsageCache {
     // 테스트 시임 — 기본값은 실환경(실 로그 루트·Application Support·실시간).
     private let claudeRoot: URL?
     private let codexRoot: URL?
+    private let geminiRoot: URL?
     private let fileURL: URL
     private let now: @Sendable () -> Date
 
-    init(claudeRoot: URL? = nil, codexRoot: URL? = nil, fileURL: URL? = nil,
+    init(claudeRoot: URL? = nil, codexRoot: URL? = nil, geminiRoot: URL? = nil, fileURL: URL? = nil,
          now: @escaping @Sendable () -> Date = Date.init) {
         self.claudeRoot = claudeRoot
         self.codexRoot = codexRoot
+        self.geminiRoot = geminiRoot
         self.fileURL = fileURL ?? Self.defaultFileURL
         self.now = now
     }
@@ -58,6 +79,16 @@ actor LocalUsageCache {
         return r
     }
 
+    func geminiEntries(modifiedSince: Date) -> [LocalUsageReader.Entry] {
+        ensureLoaded()
+        let fmt = LocalUsageReader.localDayFormatter()
+        let r = collect(root: geminiRoot ?? LocalUsageReader.geminiTmpDir, since: modifiedSince, cache: &geminiCache) {
+            LocalUsageReader.parseGeminiFile($0, fmt: fmt)
+        }
+        saveIfNeeded()
+        return r
+    }
+
     private func collect(root: URL, since: Date, cache: inout [String: Blob],
                          parse: (URL) -> [LocalUsageReader.Entry]) -> [LocalUsageReader.Entry] {
         let fm = FileManager.default
@@ -67,7 +98,8 @@ actor LocalUsageCache {
             options: [.skipsHiddenFiles]) else { return [] }
         var result: [LocalUsageReader.Entry] = []
         for case let url as URL in en {
-            guard url.pathExtension == "jsonl" else { continue }
+            // .jsonl(Claude/Codex/Gemini 신규) + .json(Gemini 레거시 세션)
+            guard url.pathExtension == "jsonl" || url.pathExtension == "json" else { continue }
             guard let v = try? url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey]),
                   let mtime = v.contentModificationDate, mtime >= since else { continue }
             let size = v.fileSize ?? 0
@@ -95,6 +127,7 @@ actor LocalUsageCache {
         guard let snap = try? JSONDecoder().decode(Snapshot.self, from: data) else { return }
         claudeCache = snap.claude
         codexCache = snap.codex
+        geminiCache = snap.gemini
     }
 
     /// 어떤 조회 윈도우(오늘/주/월)에도 들지 않는 오래된 파일 blob 을 제거해 캐시 무한 증가를 막는다.
@@ -103,6 +136,7 @@ actor LocalUsageCache {
         let cutoff = now().addingTimeInterval(-40 * 86400)
         claudeCache = claudeCache.filter { $0.value.mtime >= cutoff }
         codexCache = codexCache.filter { $0.value.mtime >= cutoff }
+        geminiCache = geminiCache.filter { $0.value.mtime >= cutoff }
     }
 
     /// 변경이 있으면 디스크에 저장(최소 60초 간격으로 throttle — 잦은 쓰기 방지).
@@ -110,7 +144,7 @@ actor LocalUsageCache {
         guard dirty else { return }
         if let last = lastSave, now().timeIntervalSince(last) < 60 { return }
         prune()
-        let snap = Snapshot(claude: claudeCache, codex: codexCache)
+        let snap = Snapshot(claude: claudeCache, codex: codexCache, gemini: geminiCache)
         if let data = try? JSONEncoder().encode(snap) {
             // JSON 은 zlib 로 크게 압축됨(수 MB → 수백 KB). 실패 시 평문 저장(로드가 양쪽 다 처리).
             let out = (try? (data as NSData).compressed(using: .zlib) as Data) ?? data
