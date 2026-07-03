@@ -72,6 +72,7 @@ Menu-bar items, refresh interval (1–15 min or manual), launch at login, a Keyc
 
 ## Also in the box
 
+- **Per-service tabs** — with more than one CLI connected, compact tabs switch the detail & limits between Claude Code / Codex / Gemini; today's total stays combined.
 - **Official limits** — Claude & Codex 5-hour / weekly utilization with reset countdowns, right under today's numbers.
 - **Burn-rate forecast** — projects when the current 5h window hits 100%.
 - **In-app updates** — one-click update check; current version shown in Settings.
