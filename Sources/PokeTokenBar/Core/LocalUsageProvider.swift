@@ -32,6 +32,34 @@ struct LocalClaudeProvider: UsageProvider {
     }
 }
 
+/// 로컬 로그 직접 파싱 기반 Gemini CLI provider. (블록 없음 — Codex 와 동일 축약형)
+/// 세션이 ~/.gemini/tmp/<hash>/chats/ 에 있을 때만 데이터가 잡힌다(없으면 스냅샷 미생성 → UI 미표시).
+struct LocalGeminiProvider: UsageProvider {
+    let id = "gemini"
+    let displayName = "Gemini"
+
+    func fetchDaily() async throws -> DailyUsage? {
+        let now = Date()
+        let entries = await LocalUsageCache.shared.geminiEntries(modifiedSince: Calendar.current.startOfDay(for: now))
+        return LocalUsageReader.daily(entries: entries, localDay: LocalUsageReader.todayKey())
+    }
+
+    func fetchEnrichment() async -> ProviderEnrichment {
+        let now = Date()
+        let monthStart = LocalUsageReader.startOfMonth(now)
+        let entries = await LocalUsageCache.shared.geminiEntries(modifiedSince: monthStart)
+        let fmt = LocalUsageReader.localDayFormatter()
+        var r = ProviderEnrichment()
+        let weekStart = LocalUsageReader.startOfWeek(now)
+        r.weekTotal = LocalUsageReader.period(entries: entries, periodKey: fmt.string(from: weekStart),
+                                              fromDay: fmt.string(from: weekStart), toDay: fmt.string(from: now))
+        r.monthTotal = LocalUsageReader.period(entries: entries, periodKey: LocalUsageReader.monthKey(now),
+                                               fromDay: fmt.string(from: monthStart), toDay: fmt.string(from: now))
+        r.periodsOK = true
+        return r
+    }
+}
+
 /// 로컬 로그 직접 파싱 기반 Codex provider. (블록 없음, 주간 = 일별 합산)
 struct LocalCodexProvider: UsageProvider {
     let id = "codex"

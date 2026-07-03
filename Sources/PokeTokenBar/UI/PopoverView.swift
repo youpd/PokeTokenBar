@@ -10,6 +10,8 @@ enum PopoverTab { case home, collection }
 final class PopoverNavigation {
     var showSettings = false
     var tab: PopoverTab = .home
+    /// 프로바이더 탭 선택 — reset() 대상이 아님(팝오버를 다시 열어도 보던 서비스 유지).
+    var providerID: String?
 
     func reset() {
         showSettings = false
@@ -82,7 +84,7 @@ struct PopoverView: View {
                 Divider()
                 header
                 Divider()
-                if store.hasAnyLimits {
+                if selectedProviderHasLimits {
                     limitsSection
                     Divider()
                 }
@@ -113,21 +115,51 @@ struct PopoverView: View {
                     .foregroundStyle(.secondary)
             }
 
-            ForEach(store.snapshots) { snapshot in
-                if let today = snapshot.today {
-                    providerRow(snapshot: snapshot, today: today)
-                }
-            }
-
-            // 주간/월간 누적
+            // 주간/월간 누적 (전 서비스 합산 — 오늘 합계와 함께 통합 통계)
             if store.weekTotalTokens > 0 || store.monthTotalTokens > 0 {
                 HStack(spacing: 14) {
                     periodLabel(l.thisWeek, tokens: store.weekTotalTokens, cost: store.weekCostTotal)
                     periodLabel(l.thisMonth, tokens: store.monthTotalTokens, cost: store.monthCostTotal)
                     Spacer()
                 }
-                .padding(.top, 4)
+                .padding(.top, 2)
             }
+
+            // 연결된 서비스가 2개 이상이면 작은 탭으로 서비스별 상세를 넘나든다
+            // (합계는 위에 유지 — 상세·한도만 탭 스코프).
+            if store.snapshots.count > 1 {
+                providerTabBar
+                    .padding(.top, 6)
+            }
+            if let snap = selectedSnapshot, let today = snap.today {
+                providerRow(snapshot: snap, today: today)
+            }
+        }
+    }
+
+    /// 현재 선택된 프로바이더 스냅샷 — 선택이 없거나 연결 해제됐으면 첫 번째로 폴백.
+    private var selectedSnapshot: ProviderSnapshot? {
+        store.snapshot(preferring: nav.providerID)
+    }
+
+    private var providerTabBar: some View {
+        HStack(spacing: 6) {
+            ForEach(store.snapshots) { snap in
+                let isSelected = snap.providerID == selectedSnapshot?.providerID
+                Button {
+                    nav.providerID = snap.providerID
+                } label: {
+                    Text(snap.displayName)
+                        .font(.caption.weight(isSelected ? .semibold : .regular))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(isSelected ? Color.accentColor.opacity(0.18) : Color.secondary.opacity(0.08))
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
         }
     }
 
@@ -186,14 +218,22 @@ struct PopoverView: View {
 
     // MARK: 한도 섹션 — 공식 5h/주간 % + 리셋 카운트다운
 
+    /// 선택된 프로바이더에 표시할 공식 한도가 있는가 (Gemini 는 공식 한도 API 없음 → 섹션 생략).
+    private var selectedProviderHasLimits: Bool {
+        switch selectedSnapshot?.providerID {
+        case "claude_code": return store.limits != nil
+        case "codex": return store.codexLimits?.codex.hasVisibleLimit == true
+        default: return false
+        }
+    }
+
     @ViewBuilder
     private var limitsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(l.limitsOfficial)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            if let limits = store.limits {
-                limitProviderTitle("Claude Code")
+            if selectedSnapshot?.providerID == "claude_code", let limits = store.limits {
                 limitRow(name: l.fiveHourSession, window: limits.fiveHour)
                 forecastRow
                 limitRow(name: l.weekly, window: limits.sevenDay)
@@ -215,8 +255,8 @@ struct PopoverView: View {
                     }
                 }
             }
-            if let codex = store.codexLimits?.codex, codex.hasVisibleLimit {
-                limitProviderTitle("Codex")
+            if selectedSnapshot?.providerID == "codex",
+               let codex = store.codexLimits?.codex, codex.hasVisibleLimit {
                 codexMetaRow(codex)
                 codexLimitRow(name: l.codexWindow(codex.primary?.windowDurationMins), window: codex.primary)
                 codexLimitRow(name: l.codexWindow(codex.secondary?.windowDurationMins), window: codex.secondary)
@@ -225,12 +265,6 @@ struct PopoverView: View {
         }
     }
 
-    private func limitProviderTitle(_ name: String) -> some View {
-        Text(name)
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(.secondary)
-            .padding(.top, 2)
-    }
 
     @ViewBuilder
     private func limitRow(name: String, window: LimitWindow?) -> some View {

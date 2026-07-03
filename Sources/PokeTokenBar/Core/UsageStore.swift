@@ -95,10 +95,6 @@ final class UsageStore {
         return snapshots.reduce(0) { $0 + ($1.today?.date == todayKey ? $1.todayTotalTokens : 0) }
     }
 
-    var hasAnyLimits: Bool {
-        limits != nil || codexLimits?.hasVisibleLimit == true
-    }
-
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 
@@ -121,6 +117,12 @@ final class UsageStore {
     var todayCostTotal: Double {
         let todayKey = LocalUsageReader.todayKey()
         return snapshots.reduce(0) { $0 + ($1.today?.date == todayKey ? ($1.today?.totalCost ?? 0) : 0) }
+    }
+
+    /// 프로바이더 탭 선택 해석 — 선호 id 가 연결돼 있으면 그것, 아니면(첫 실행/연결 해제) 첫 번째.
+    func snapshot(preferring id: String?) -> ProviderSnapshot? {
+        if let id, let s = snapshots.first(where: { $0.providerID == id }) { return s }
+        return snapshots.first
     }
 
     var weekTotalTokens: Int { snapshots.reduce(0) { $0 + ($1.weekTotal?.totalTokens ?? 0) } }
@@ -193,7 +195,7 @@ final class UsageStore {
 
     // MARK: 생명주기
 
-    init(providers: [any UsageProvider] = [LocalClaudeProvider(), LocalCodexProvider()],
+    init(providers: [any UsageProvider] = [LocalClaudeProvider(), LocalCodexProvider(), LocalGeminiProvider()],
          claudeLimitsProvider: any ClaudeLimitsProviding = OAuthLimitsProvider(),
          codexLimitsProvider: any CodexLimitsProviding = CodexRateLimitsProvider(),
          autoRefresh: Bool = true,

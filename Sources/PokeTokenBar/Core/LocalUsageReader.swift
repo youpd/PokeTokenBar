@@ -41,11 +41,14 @@ enum LocalUsageReader {
     static var codexSessionsDir: URL {
         FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".codex/sessions")
     }
+    static var geminiTmpDir: URL {
+        FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".gemini/tmp")
+    }
 
     // MARK: 스캔 (mtime 윈도우)
 
     /// `root` 하위(재귀)의 `.jsonl` 파일 중 `modifiedSince` 이후 수정된 것.
-    static func jsonlFiles(in root: URL, modifiedSince: Date) -> [URL] {
+    static func jsonlFiles(in root: URL, modifiedSince: Date, allowJSON: Bool = false) -> [URL] {
         let fm = FileManager.default
         guard let en = fm.enumerator(
             at: root,
@@ -53,7 +56,8 @@ enum LocalUsageReader {
             options: [.skipsHiddenFiles]) else { return [] }
         var out: [URL] = []
         for case let url as URL in en {
-            guard url.pathExtension == "jsonl" else { continue }
+            // 기본 .jsonl. .json 은 Gemini 전용(allowJSON) — Claude 루트 .meta.json 스캔 방지.
+            guard url.pathExtension == "jsonl" || (allowJSON && url.pathExtension == "json") else { continue }
             let v = try? url.resourceValues(forKeys: [.contentModificationDateKey])
             if let m = v?.contentModificationDate, m >= modifiedSince { out.append(url) }
         }
@@ -159,6 +163,70 @@ enum LocalUsageReader {
         return Entry(
             id: "codex|\(file)|\(turn)", date: date, localDay: fmt.string(from: date), model: model,
             input: nonCachedInput, output: output, cacheWrite: 0, cacheRead: cached)
+    }
+
+    // MARK: Gemini 파싱
+
+    /// Gemini CLI 세션 파일(~/.gemini/tmp/<hash>/chats/session-*.jsonl 및 레거시 .json) 파싱.
+    /// - 신규 .jsonl: 라인 단위 레코드 — type=="gemini" 메시지의 인라인 tokens, 또는
+    ///   type=="message_update" 의 tokens (같은 id 는 마지막 값이 최종).
+    /// - 레거시 .json: 단일 ConversationRecord { messages: [...] } 의 message.tokens.
+    /// 토큰 매핑(usageMetadata 의미 보존, Entry.total == totalTokenCount):
+    ///   input = (input − cached) + tool(toolUsePrompt, 입력측) / cacheRead = cached
+    ///   output = output + thoughts(출력측 reasoning) / cacheWrite = 0
+    static func parseGeminiFile(_ url: URL, fmt: DateFormatter) -> [Entry] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let file = url.lastPathComponent
+        // 메시지 id → (레코드, 토큰) — message_update 가 나중에 오면 갱신
+        var byID: [String: Entry] = [:]
+        var order: [String] = []
+
+        func absorb(_ obj: [String: Any], fallbackTimestamp: Date?) {
+            guard let tokens = obj["tokens"] as? [String: Any] else { return }
+            let id = (obj["id"] as? String) ?? UUID().uuidString
+            let ts = (obj["timestamp"] as? String).flatMap { ISO8601Parser.date(from: $0) } ?? fallbackTimestamp
+            guard let date = ts else { return }
+            let input = intValue(tokens["input"])
+            let cached = intValue(tokens["cached"])
+            let entry = Entry(
+                id: "gemini|\(file)|\(id)", date: date, localDay: fmt.string(from: date),
+                model: (obj["model"] as? String) ?? "gemini",
+                input: max(0, input - cached) + intValue(tokens["tool"]),
+                output: intValue(tokens["output"]) + intValue(tokens["thoughts"]),
+                cacheWrite: 0, cacheRead: cached)
+            if byID[id] == nil { order.append(id) }
+            byID[id] = entry   // update 레코드가 최종값
+        }
+
+        if url.pathExtension == "jsonl" {
+            guard let text = String(data: data, encoding: .utf8) else { return [] }
+            var lastTimestamp: Date?
+            for line in text.split(separator: "\n", omittingEmptySubsequences: true) {
+                guard line.contains("\"tokens\"") || line.contains("\"timestamp\"") else { continue }
+                guard let d = String(line).data(using: .utf8),
+                      let obj = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { continue }
+                if let ts = (obj["timestamp"] as? String).flatMap({ ISO8601Parser.date(from: $0) }) {
+                    lastTimestamp = ts
+                }
+                absorb(obj, fallbackTimestamp: lastTimestamp)
+            }
+        } else {
+            // 레거시 단일 JSON — messages 배열
+            guard let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let messages = obj["messages"] as? [[String: Any]] else { return [] }
+            let sessionStart = (obj["startTime"] as? String).flatMap { ISO8601Parser.date(from: $0) }
+            for m in messages { absorb(m, fallbackTimestamp: sessionStart) }
+        }
+        return order.compactMap { byID[$0] }
+    }
+
+    static func geminiEntries(modifiedSince: Date, root: URL? = nil) -> [Entry] {
+        let fmt = localDayFormatter()
+        var entries: [Entry] = []
+        for file in jsonlFiles(in: root ?? geminiTmpDir, modifiedSince: modifiedSince, allowJSON: true) {
+            entries.append(contentsOf: parseGeminiFile(file, fmt: fmt))
+        }
+        return entries
     }
 
     private static func codexModel(_ line: String) -> String? {
