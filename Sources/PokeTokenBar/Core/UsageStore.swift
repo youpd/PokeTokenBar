@@ -74,7 +74,7 @@ final class UsageStore {
 
     /// 앱 언어 미러(알림 현지화용). 단일 소스는 CompanionStore.language —
     /// 설정 변경/기동 시 동기화한다.
-    var localizationLanguage: AppLanguage = .ko
+    var localizationLanguage: AppLanguage = .systemDefault   // companion.language 로 재시드 전까지의 기본(실행순서 무관 안전)
 
     private let providers: [any UsageProvider]
     private let limitsProvider: any ClaudeLimitsProviding
