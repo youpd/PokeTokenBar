@@ -138,6 +138,11 @@ struct L {
     var notifShinyHatchTitle: String { t("✨ 색이 다른 포켓몬!", "✨ Shiny Pokémon!", "✨ 色違いポケモン！") }
     func notifShinyHatchBody(_ name: String) -> String { t("색이 다른 \(name)이(가) 태어났어요! (1/64)", "A shiny \(name) hatched! (1 in 64)", "色違いの \(name) が生まれました！(1/64)") }
     var eggImminent: String { t("곧 부화해요!", "About to hatch!", "もうすぐ孵化！") }
+    /// 첫 실행(아직 토큰 적립 0) 안내 — "왜 아무 일도 안 일어나지"를 방지.
+    var eggFirstRunHint: String {
+        t("로컬 Claude·Codex·Gemini 로그의 사용량으로 자라요. 약 5M 토큰을 쓰면 알이 부화해요.",
+          "Grows from your local Claude/Codex/Gemini usage. Your egg hatches after ~5M tokens.",
+          "ローカルの Claude・Codex・Gemini の使用量で育ちます。約5Mトークンでタマゴが孵化します。") }
     var notifEvolveTitle: String { t("✨ 진화!", "✨ Evolved!", "✨ 進化！") }
     func notifEvolveBody(_ name: String) -> String { t("\(name)(으)로 진화했어요!", "Evolved into \(name)!", "\(name) に進化しました！") }
     var notifGraduateTitle: String { t("🎓 졸업!", "🎓 Graduated!", "🎓 卒業！") }

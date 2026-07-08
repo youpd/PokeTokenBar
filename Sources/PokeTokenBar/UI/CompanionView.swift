@@ -144,7 +144,7 @@ struct CompanionHeader: View {
                         Text(store.displayName).font(.callout.weight(.semibold))
                         if store.currentIsShiny { Text("✨").font(.system(size: 11)) }
                         if let r = store.rarity {
-                            Text(r.rawValue.uppercased()).font(.system(size: 8, weight: .bold))
+                            Text(store.l.rarityLabel(r).uppercased()).font(.system(size: 8, weight: .bold))
                                 .padding(.horizontal, 5).padding(.vertical, 1)
                                 .background(rarityColor(r)).foregroundStyle(.white)
                                 .clipShape(Capsule())
@@ -168,6 +168,12 @@ struct CompanionHeader: View {
                         ProgressView(value: store.eggProgress).controlSize(.small).tint(.orange)
                         Text(store.l.eggToHatch(TokenFormatter.compact(store.eggTokensToHatch)))
                             .font(.caption2).foregroundStyle(.tertiary)
+                        // 첫 실행(적립 0) — 정적 알 앞에서 "고장났나" 오해 방지용 한 줄 안내
+                        if !store.eggStarted {
+                            Text(store.l.eggFirstRunHint)
+                                .font(.caption2).foregroundStyle(.tertiary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                     Text(statusLine).font(.caption2).foregroundStyle(.secondary)
                 }
@@ -282,7 +288,7 @@ struct CollectionView: View {
                     ForEach(store.dexEntriesSorted) { entry in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
-                                Text(entry.rarity.rawValue.uppercased())
+                                Text(store.l.rarityLabel(entry.rarity).uppercased())
                                     .font(.system(size: 8, weight: .bold))
                                     .padding(.horizontal, 5).padding(.vertical, 1)
                                     .background(rarityColor(entry.rarity)).foregroundStyle(.white)

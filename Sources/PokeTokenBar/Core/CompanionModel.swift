@@ -19,6 +19,16 @@ enum AppLanguage: String, Codable, Sendable, CaseIterable {
     var label: String {
         switch self { case .ko: return "한국어"; case .en: return "English"; case .ja: return "日本語" }
     }
+
+    /// 신규 설치 기본 언어 — 시스템 선호 언어에서 유추(글로벌 출시: 한국어 강제 금지).
+    /// ko/ja 만 매칭, 그 외 전부 영어(fallback-of-fallback). 기존 사용자는 저장된 언어를 그대로 쓴다.
+    static var systemDefault: AppLanguage {
+        switch Locale.preferredLanguages.first?.prefix(2).lowercased() {
+        case "ko": return .ko
+        case "ja": return .ja
+        default:   return .en
+        }
+    }
 }
 
 /// 희귀도 — PokéAPI capture_rate / is_legendary 로 판정.
@@ -157,7 +167,8 @@ struct MonState: Codable, Sendable {
     var totalForms: Int
     var isShiny = false             // 부화 시 확정, 진화해도 유지
     var nature: PokemonNature?      // 부화 시 확정 (구버전 저장은 nil)
-    var currentID: Int { pathIDs[min(stageIndex, pathIDs.count - 1)] }
+    // pathIDs 가 비면(손상된 상태 파일) baseID 로 폴백 — 렌더마다 읽히므로 out-of-bounds 크래시 방지.
+    var currentID: Int { pathIDs.isEmpty ? baseID : pathIDs[min(stageIndex, pathIDs.count - 1)] }
 
     init(baseID: Int, pathIDs: [Int], stageIndex: Int, usedAtStage: Int,
          rarity: Rarity, totalForms: Int, isShiny: Bool = false, nature: PokemonNature? = nil) {
@@ -176,6 +187,10 @@ struct MonState: Codable, Sendable {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         baseID = try c.decode(Int.self, forKey: .baseID)
         pathIDs = try c.decode([Int].self, forKey: .pathIDs)
+        // 빈 pathIDs 는 손상 상태 → 디코드 실패시켜 전체 CompanionState 가 기본(알)로 폴백되게 한다.
+        guard !pathIDs.isEmpty else {
+            throw DecodingError.dataCorruptedError(forKey: .pathIDs, in: c, debugDescription: "empty pathIDs")
+        }
         stageIndex = try c.decode(Int.self, forKey: .stageIndex)
         usedAtStage = try c.decode(Int.self, forKey: .usedAtStage)
         rarity = try c.decode(Rarity.self, forKey: .rarity)
@@ -238,7 +253,7 @@ struct CompanionState: Codable, Sendable {
     var dex: [DexEntry] = []
     // 소유한 (base,final) 쌍 — 분기 다양성용
     var collectedFinals: Set<String> = []
-    var language: AppLanguage = .ko
+    var language: AppLanguage = .systemDefault   // 신규 설치 = 시스템 로케일
 
     init() {}
 
@@ -254,7 +269,7 @@ struct CompanionState: Codable, Sendable {
         active = try c.decodeIfPresent(MonState.self, forKey: .active)
         dex = try c.decodeIfPresent([DexEntry].self, forKey: .dex) ?? []
         collectedFinals = try c.decodeIfPresent(Set<String>.self, forKey: .collectedFinals) ?? []
-        language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .ko
+        language = try c.decodeIfPresent(AppLanguage.self, forKey: .language) ?? .systemDefault
     }
 }
 
