@@ -363,6 +363,29 @@ final class CompanionIdentityTests: XCTestCase {
         XCTAssertEqual(round.active?.isShiny, false)
     }
 
+    /// [출시 안전] 손상된 상태 파일: active.pathIDs 가 비면 디코드가 실패해야 한다
+    /// (→ load() 가 기본 알 상태로 폴백 → currentID out-of-bounds 크래시 방지).
+    func testEmptyPathIDsRejectedOnDecode() {
+        let corrupt = """
+        {"installBaselineSet":true,"eggUsage":0,"lastDate":"d1",
+         "active":{"baseID":1,"pathIDs":[],"stageIndex":0,"usedAtStage":0,"rarity":"common","totalForms":3}}
+        """
+        XCTAssertThrowsError(try JSONDecoder().decode(CompanionState.self, from: Data(corrupt.utf8)),
+                             "빈 pathIDs 는 디코드 거부돼야 한다")
+    }
+
+    /// currentID 는 pathIDs 가 비어도(방어) baseID 로 폴백 — 크래시 없음.
+    func testCurrentIDFallsBackToBaseWhenPathEmpty() {
+        let m = MonState(baseID: 42, pathIDs: [], stageIndex: 0, usedAtStage: 0, rarity: .common, totalForms: 1)
+        XCTAssertEqual(m.currentID, 42)
+    }
+
+    /// 신규 설치 기본 언어는 시스템 로케일에서 유추 — 유효한 케이스이고 크래시 없음(한국어 강제 아님).
+    func testSystemDefaultLanguageResolves() {
+        XCTAssertTrue(AppLanguage.allCases.contains(AppLanguage.systemDefault))
+        XCTAssertEqual(CompanionState().language, AppLanguage.systemDefault)
+    }
+
     /// 부화/진화가 연출 트리거(celebrationSeq)를 올리고, consume 후 비워지는지.
     func testCelebrationFiresOnHatchAndEvolve() async {
         let s = store(linear3, seed: 9)

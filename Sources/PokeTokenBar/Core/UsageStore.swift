@@ -74,7 +74,7 @@ final class UsageStore {
 
     /// 앱 언어 미러(알림 현지화용). 단일 소스는 CompanionStore.language —
     /// 설정 변경/기동 시 동기화한다.
-    var localizationLanguage: AppLanguage = .ko
+    var localizationLanguage: AppLanguage = .systemDefault   // companion.language 로 재시드 전까지의 기본(실행순서 무관 안전)
 
     private let providers: [any UsageProvider]
     private let limitsProvider: any ClaudeLimitsProviding
@@ -241,7 +241,8 @@ final class UsageStore {
             Task { @MainActor in self?.resumePolling() }
         }
 
-        requestNotificationAuthorization()
+        // 알림 권한은 기동 즉시 묻지 않는다 — 앱을 이해하기 전 콜드 프롬프트는 거부율이 높고
+        // 거부 시 재요청 경로가 없다. 팝오버 첫 오픈(사용자 의도)에 requestNotificationAuthorizationIfNeeded 로 1회 요청.
         if autoRefresh { Task { await refresh() } }
     }
 
@@ -471,8 +472,12 @@ final class UsageStore {
 
     // MARK: 한도 알림 (ClaudeBar 임계값 패턴)
 
-    private func requestNotificationAuthorization() {
+    private var notifAuthRequested = false
+    /// 팝오버 첫 오픈 등 사용자 의도 시점에 1회만 알림 권한 요청(멱등).
+    func requestNotificationAuthorizationIfNeeded() {
+        guard !notifAuthRequested else { return }
         guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundlePath.hasSuffix(".app") else { return }
+        notifAuthRequested = true
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
