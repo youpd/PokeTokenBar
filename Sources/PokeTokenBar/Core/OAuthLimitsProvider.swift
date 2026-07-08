@@ -58,6 +58,18 @@ private actor OAuthAccessTokenCache {
             return cachedCredential.accessToken
         }
 
+        // 자동(무프롬프트) 경로에서 login 키체인이 잠겨 있으면 키체인 접근을 일절 하지 않는다.
+        // no-UI 플래그(kSecUseAuthenticationUIFail/LAContext)는 '인증' 프롬프트만 억제할 뿐
+        // 잠긴 키체인의 '암호 입력' 다이얼로그는 못 막는다 → 잠긴 아침마다 사용자에게 팝업이 뜨는
+        // 결함의 원인. 잠겨 있으면 파일 크리덴셜만 시도하고(키체인 무관), 없으면 조용히 실패한다.
+        if !allowKeychainPrompt, Self.isDefaultKeychainLocked() {
+            if let credential = try Self.readClaudeCredentialsFile() {
+                cachedCredential = credential   // 잠긴 키체인에는 캐시 write 안 함(그 write 도 프롬프트 유발)
+                return credential.accessToken
+            }
+            throw LimitsError.keychainInteractionNotAllowed
+        }
+
         if let credential = try Self.readPokeTokenBarCache() {
             cachedCredential = credential
             return credential.accessToken
@@ -102,6 +114,17 @@ private actor OAuthAccessTokenCache {
             AppLog.write("silent claude keychain read failed: \(error)")
             return nil
         }
+    }
+
+    /// login(기본) 키체인 잠금 여부. GetStatus 는 프롬프트 없이 상태만 읽는다(안전).
+    /// SecKeychain* 는 deprecated 지만 파일 기반 login 키체인의 잠금 상태를 무프롬프트로 조회하는
+    /// 유일한 API — 대체재 없음. 조회 실패 시 '잠기지 않음'으로 간주(기존 경로 유지, 보수적).
+    private nonisolated static func isDefaultKeychainLocked() -> Bool {
+        var keychain: SecKeychain?
+        guard SecKeychainCopyDefault(&keychain) == errSecSuccess, let keychain else { return false }
+        var status = SecKeychainStatus()
+        guard SecKeychainGetStatus(keychain, &status) == errSecSuccess else { return false }
+        return (status & SecKeychainStatus(kSecUnlockStateStatus)) == 0   // unlock 비트 꺼짐 = 잠김
     }
 
     func invalidate(removePersistentCache: Bool = false) {
@@ -172,6 +195,10 @@ private actor OAuthAccessTokenCache {
     }
 
     private nonisolated static func deletePokeTokenBarCache() {
+        // 잠긴 키체인에서 삭제(SecItemDelete)도 암호 다이얼로그를 유발한다. 401 무효화 경로가
+        // 프롬프트 여부와 무관하게 호출하므로, 잠겨 있으면 디스크 삭제는 생략한다(메모리 캐시는
+        // invalidate 가 이미 비움 — 만료 항목은 다음 unlocked 읽기에서 정리됨).
+        if isDefaultKeychainLocked() { return }
         var query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: OAuthCredentialData.tokenMacCacheService,
