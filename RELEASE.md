@@ -64,3 +64,11 @@ brew update && brew upgrade --cask poke-token-bar
 ```
 
 `brew list --cask --versions poke-token-bar` 와 `/Applications/PokeTokenBar.app` 버전이 새 버전인지 확인.
+
+## 서명 (2026-07-08 부터)
+
+릴리스 빌드는 이 머신의 `PokeTokenBar Local` 자체서명 인증서로 서명된다
+(`scripts/create-signing-cert.sh` 로 생성, keychain 에만 존재 — 레포 미커밋).
+- designated requirement 가 버전 간 고정 → 사용자의 Keychain "항상 허용"이 업데이트 후에도 유지.
+- 전환 직후 첫 업데이트 1회는 기존(ad-hoc 시절) 허용이 무효라 마지막 프롬프트가 뜰 수 있음.
+- 인증서를 분실/재생성하면 DR 이 바뀌어 전 사용자 재프롬프트 — 재생성 금지(스크립트가 가드).
