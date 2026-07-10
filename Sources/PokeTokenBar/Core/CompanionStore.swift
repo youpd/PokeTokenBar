@@ -288,7 +288,10 @@ final class CompanionStore {
         guard !isHatching else { return }
         isHatching = true
         defer { isHatching = false }
-        guard let line = try? await provider.line(baseSpeciesID: baseID) else { return }
+        guard let line = try? await provider.line(baseSpeciesID: baseID) else {
+            AppLog.write("hatch: line fetch failed for base \(baseID) — egg kept, retry next tick")
+            return
+        }
         currentLine = line
         // 부화 임계 초과분은 부화체 성장에 이월(낭비 없음).
         let overflow = max(0, state.eggUsage - PokemonBalance.eggHatchThreshold)
@@ -299,6 +302,7 @@ final class CompanionStore {
         state.active = MonState(baseID: line.baseID, pathIDs: [line.baseID], stageIndex: 0,
                                 usedAtStage: 0, rarity: line.rarity, totalForms: line.totalForms,
                                 isShiny: isShiny, nature: nature)
+        AppLog.write("hatch: hatched base=\(line.baseID) rarity=\(line.rarity) shiny=\(isShiny) forms=\(line.totalForms)")
         let name = line.localizedName(line.baseID, state.language)
         notifyCompanionEvent(isShiny ? l.notifShinyHatchTitle : l.notifHatchTitle,
                              isShiny ? l.notifShinyHatchBody(name) : l.notifHatchBody(name))
@@ -328,18 +332,43 @@ final class CompanionStore {
     ///   ③ 누적 가중치에서 정확히 1롤 — 루프/재롤 없음, 시간 상한 확정적
     /// 인덱스 취득 실패(오프라인 + 캐시 없음) 시 nil → 알 유지, 다음 갱신 틱 재시도.
     private func chooseBase() async -> Int? {
-        guard let index = try? await provider.baseSpeciesIndex(), !index.isEmpty else { return nil }
-        let weights = index.map { e in
-            state.collectedFinals.contains(where: { $0.hasPrefix("\(e.id):") })
-                ? max(1, e.captureRate / 2) : max(1, e.captureRate)
+        if let index = try? await provider.baseSpeciesIndex(), !index.isEmpty {
+            let weights = index.map { e in
+                state.collectedFinals.contains(where: { $0.hasPrefix("\(e.id):") })
+                    ? max(1, e.captureRate / 2) : max(1, e.captureRate)
+            }
+            let total = weights.reduce(0, +)
+            var r = Int(rng.next() % UInt64(total))
+            for (i, w) in weights.enumerated() {
+                r -= w
+                if r < 0 { return index[i].id }
+            }
+            return index.last?.id   // 도달 불가(방어)
         }
-        let total = weights.reduce(0, +)
-        var r = Int(rng.next() % UInt64(total))
-        for (i, w) in weights.enumerated() {
-            r -= w
-            if r < 0 { return index[i].id }
+        // GraphQL base 인덱스 엔드포인트 장애 → REST 폴백. 부화가 한 엔드포인트에 묶이지 않게.
+        AppLog.write("hatch: base index unavailable — REST fallback")
+        return await chooseBaseViaREST()
+    }
+
+    /// REST 폴백 — 1~649 중 무작위 id 를 뽑아 base 인지 pokemon-species 로 확인(rejection sampling).
+    /// GraphQL 인덱스가 죽어도 부화가 되게 한다. 가중치(capture_rate)는 생략 — 희귀도는 부화 후
+    /// line() 이 실제 capture_rate 로 계산하므로 결과 개체의 등급은 정확하다. 인덱스 복구 시 가중 선택 재개.
+    private func chooseBaseViaREST() async -> Int? {
+        for attempt in 1...16 {
+            let id = Int(rng.next() % 649) + 1
+            do {
+                if let bs = try await provider.baseSpecies(id: id) {
+                    AppLog.write("hatch: REST fallback picked base \(id) (cap \(bs.captureRate), \(attempt) tries)")
+                    return id
+                }
+                // nil = base 아님(진화 중간체) → 다음 시도
+            } catch {
+                AppLog.write("hatch: REST fallback network error — retry next tick: \(error)")
+                return nil   // REST 도 불가 → 알 유지, 다음 update 틱 재시도
+            }
         }
-        return index.last?.id   // 도달 불가(방어)
+        AppLog.write("hatch: REST fallback exhausted 16 tries")
+        return nil
     }
 
     private func computeState(burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool, today: Int) -> CompanionStateKind {

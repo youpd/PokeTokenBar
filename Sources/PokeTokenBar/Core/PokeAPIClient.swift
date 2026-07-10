@@ -11,6 +11,9 @@ protocol PokeProviding: Sendable {
     func line(baseSpeciesID: Int) async throws -> EvoLine
     /// 1~5세대 base 전체 인덱스 (GraphQL 1쿼리, 디스크 캐시).
     func baseSpeciesIndex() async throws -> [BaseSpecies]
+    /// 단일 종이 base(진화 시작점)면 BaseSpecies, 아니면 nil.
+    /// GraphQL 인덱스 엔드포인트 장애 시 REST(pokemon-species)로 부화 후보를 뽑는 폴백용.
+    func baseSpecies(id: Int) async throws -> BaseSpecies?
 }
 
 /// PokéAPI 클라이언트 — 종/진화체인을 런타임 fetch + 파싱. 포켓몬 데이터는 레포에 번들하지 않는다.
@@ -52,6 +55,8 @@ actor PokeAPIClient: PokeProviding {
     // MARK: base 인덱스 (부화 후보)
 
     private var baseIndexCache: [BaseSpecies]?
+    private var restBuildInFlight = false
+    private var restBuildTried = false   // 세션당 1회 (GraphQL 다운 시 REST 인덱스 구축 트리거)
     private static let baseIndexFile: URL = {
         let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PokeTokenBar")
@@ -88,8 +93,52 @@ actor PokeAPIClient: PokeProviding {
                 baseIndexCache = disk.entries
                 return disk.entries
             }
+            // GraphQL 다운 + 캐시 없음 → REST 로 인덱스를 백그라운드 구축(세션 1회).
+            // 이번 부화는 per-hatch REST 폴백(chooseBaseViaREST)이 즉시 처리하고,
+            // 구축이 끝나면 디스크 캐시로 남아 이후 선택이 가중·수집반영·오프라인가능으로 복귀한다.
+            if !restBuildTried {
+                restBuildTried = true
+                Task { await self.buildBaseIndexViaREST() }
+            }
+            AppLog.write("base index (GraphQL) failed, no cache — REST build triggered; per-hatch fallback handles now: \(error)")
             throw error
         }
+    }
+
+    /// GraphQL base 인덱스 엔드포인트 장애 시 REST(pokemon-species/{id})로 base 인덱스를 직접 구축·영속.
+    /// 한 번 성공하면 base-index.json(30일)으로 남아 이후 선택은 네트워크 없이 가중·수집반영으로 동작 →
+    /// 부화가 특정 엔드포인트 생존에 영구히 묶이지 않게 하는 자가치유 캐시. PokéAPI 배려로 소규모 동시성.
+    func buildBaseIndexViaREST() async {
+        guard baseIndexCache == nil, !restBuildInFlight else { return }
+        restBuildInFlight = true
+        defer { restBuildInFlight = false }
+        AppLog.write("base index: building via REST (GraphQL unavailable)…")
+        var bases: [BaseSpecies] = []
+        let batchSize = 6
+        var start = 1
+        let maxID = 649   // Gen-V 애니메이션 스프라이트 상한 (fetchBaseIndex GraphQL 쿼리와 동일 범위)
+        while start <= maxID {
+            let end = min(start + batchSize - 1, maxID)
+            let found = await withTaskGroup(of: BaseSpecies?.self) { group -> [BaseSpecies] in
+                for id in start...end { group.addTask { try? await self.baseSpecies(id: id) } }
+                var acc: [BaseSpecies] = []
+                for await r in group { if let r { acc.append(r) } }
+                return acc
+            }
+            bases.append(contentsOf: found)
+            start += batchSize
+        }
+        // 대부분 실패(네트워크 불안정)면 빈약한 인덱스를 영속하지 않고 다음 세션 재시도.
+        guard bases.count >= 150 else {
+            AppLog.write("base index: REST build incomplete (\(bases.count)) — not cached, will retry next session")
+            return
+        }
+        bases.sort { $0.id < $1.id }
+        baseIndexCache = bases
+        if let data = try? JSONEncoder().encode(BaseIndexSnapshot(fetchedAt: Date(), entries: bases)) {
+            try? data.write(to: Self.baseIndexFile)
+        }
+        AppLog.write("base index: REST build done — \(bases.count) bases persisted (offline-capable now)")
     }
 
     private func fetchBaseIndex() async throws -> [BaseSpecies] {
@@ -114,6 +163,14 @@ actor PokeAPIClient: PokeProviding {
         let dto: SpeciesDTO = try await get(base.appendingPathComponent("pokemon-species/\(id)"))
         speciesCache[id] = dto
         return dto
+    }
+
+    /// REST 폴백 — 단일 종 상세(pokemon-species/{id})로 base 여부·capture_rate 판정.
+    /// GraphQL base 인덱스가 죽어도 REST(pokeapi.co/api/v2)는 별개 엔드포인트라 동작한다.
+    func baseSpecies(id: Int) async throws -> BaseSpecies? {
+        let dto = try await species(id)
+        guard dto.evolves_from_species == nil else { return nil }   // 진화 중간체는 부화 후보 아님
+        return BaseSpecies(id: id, captureRate: dto.capture_rate)
     }
 
     private func get<T: Decodable>(_ url: URL) async throws -> T {
