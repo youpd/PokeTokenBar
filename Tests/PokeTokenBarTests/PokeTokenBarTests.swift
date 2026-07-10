@@ -289,6 +289,33 @@ final class ModelDecodingTests: XCTestCase {
     }
 }
 
+final class SupportMailTests: XCTestCase {
+    func testMailtoURLEncodesSubjectAndBody() throws {
+        let url = try XCTUnwrap(SupportMail.mailtoURL(
+            subject: "[PokeTokenBar] 문제 리포트 (v2.3.3)",
+            body: "문제 내용:\n(설명)\n---\n앱 버전: v2.3.3"))
+        let s = url.absoluteString
+        XCTAssertTrue(s.hasPrefix("mailto:parkdongmin123@gmail.com?"), s)
+        XCTAssertTrue(s.contains("subject="))
+        XCTAssertTrue(s.contains("body="))
+        // 개행·한글·대괄호가 raw 로 남지 않아야 함 (percent-encode)
+        XCTAssertFalse(s.contains("\n"))
+        XCTAssertFalse(s.contains("문제"))
+        XCTAssertFalse(s.contains("["))
+        // 디코딩 왕복 — 메일 클라이언트가 받을 실제 값 검증
+        let comps = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(comps.queryItems?.first(where: { $0.name == "body" })?.value,
+                       "문제 내용:\n(설명)\n---\n앱 버전: v2.3.3")
+    }
+
+    func testMailBodyContainsDiagnostics() {
+        let body = L(.ko).reportMailBody(version: "2.3.3", os: "Version 14.5 (Build 23F79)")
+        XCTAssertTrue(body.contains("v2.3.3"))
+        XCTAssertTrue(body.contains("Version 14.5"))
+        XCTAssertTrue(body.contains("PokeTokenBar.log"))
+    }
+}
+
 #if os(macOS)
 final class KeychainNoUIQueryTests: XCTestCase {
     func testNoUIQueryAddsAuthenticationContextAndFailPolicy() {

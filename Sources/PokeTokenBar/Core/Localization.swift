@@ -100,6 +100,57 @@ struct L {
     var aggregationNote: String { t("토큰 집계 기준: totalTokens (input + output + cache, 로컬 날짜)", "Token basis: totalTokens (input + output + cache, local date)", "集計基準: totalTokens (input + output + cache, ローカル日付)") }
     var close: String { t("닫기", "Close", "閉じる") }
 
+    // MARK: 문제점 알리기 (설정 → 메일 리포트)
+    var reportProblem: String { t("문제점 알리기", "Report a problem", "問題を報告") }
+    var showLogFile: String { t("로그 파일 보기", "Show log file", "ログファイルを表示") }
+    var reportAttachHint: String {
+        t("메일에 로그 파일을 첨부해 주시면 원인 파악에 큰 도움이 돼요.",
+          "Attaching the log file to the email helps a lot with diagnosis.",
+          "メールにログファイルを添付していただくと原因の特定に役立ちます。")
+    }
+    func reportMailFallback(_ address: String) -> String {
+        t("메일 앱을 열 수 없어요. \(address) 로 직접 보내주세요.",
+          "Couldn't open a mail app. Please email \(address) directly.",
+          "メールアプリを開けません。\(address) 宛に直接お送りください。")
+    }
+    func reportMailSubject(_ version: String) -> String {
+        t("[PokeTokenBar] 문제 리포트 (v\(version))",
+          "[PokeTokenBar] Problem report (v\(version))",
+          "[PokeTokenBar] 問題レポート (v\(version))")
+    }
+    func reportMailBody(version: String, os: String) -> String {
+        t("""
+        문제 내용:
+        (겪으신 문제를 적어주세요 — 언제, 어떤 화면에서, 어떻게 되었는지)
+
+
+        ---
+        앱 버전: v\(version)
+        macOS: \(os)
+        로그 파일(첨부 권장): ~/Library/Logs/PokeTokenBar.log
+        """,
+        """
+        What happened:
+        (Describe the problem — when, on which screen, and what you saw)
+
+
+        ---
+        App version: v\(version)
+        macOS: \(os)
+        Log file (please attach): ~/Library/Logs/PokeTokenBar.log
+        """,
+        """
+        問題の内容:
+        （いつ・どの画面で・どうなったかをご記入ください）
+
+
+        ---
+        アプリのバージョン: v\(version)
+        macOS: \(os)
+        ログファイル（添付推奨）: ~/Library/Logs/PokeTokenBar.log
+        """)
+    }
+
     /// 새로고침 간격 라벨 (초 단위 값 → 표시). 0 = 수동.
     func intervalLabel(_ seconds: TimeInterval) -> String {
         if seconds == 0 { return t("수동", "Manual", "手動") }

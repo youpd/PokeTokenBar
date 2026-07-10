@@ -8,6 +8,7 @@ struct SettingsView: View {
     var onClose: () -> Void
     @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
     @State private var launchAtLoginError: String?
+    @State private var reportError: String?
 
     private var l: L { companion.l }
 
@@ -18,6 +19,21 @@ struct SettingsView: View {
     /// 현재 앱 버전 — 업데이트 적용 여부 확인용으로 설정창 하단에 표기.
     private static var appVersion: String {
         Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
+    }
+
+    /// 문제점 알리기 — 진단 정보(버전·macOS)가 채워진 리포트 메일을 기본 메일 앱으로 연다.
+    /// 메일 앱이 없거나 열기에 실패하면 수신 주소를 안내(복사 가능)한다.
+    private func reportProblem() {
+        let subject = l.reportMailSubject(Self.appVersion)
+        let body = l.reportMailBody(
+            version: Self.appVersion,
+            os: ProcessInfo.processInfo.operatingSystemVersionString)
+        guard let url = SupportMail.mailtoURL(subject: subject, body: body),
+              NSWorkspace.shared.open(url) else {
+            reportError = l.reportMailFallback(SupportMail.address)
+            return
+        }
+        reportError = nil
     }
 
     /// 푸터 링크 — 버전 표기와 동일한 크기·색을 상속하고 밑줄로만 구분(부모 HStack 스타일 사용).
@@ -142,6 +158,24 @@ struct SettingsView: View {
                     .font(.caption).padding(.leading, 12)
                 }
                 Toggle(l.companionNotificationsLabel, isOn: $store.companionNotifications)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 8) {
+                    Button(l.reportProblem) { reportProblem() }
+                    Button(l.showLogFile) {
+                        NSWorkspace.shared.activateFileViewerSelecting([AppLog.logFileURL])
+                    }
+                }
+                Text(l.reportAttachHint)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                if let reportError {
+                    Text(reportError)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .textSelection(.enabled)   // 폴백 주소를 복사할 수 있게
+                }
             }
 
             Text(l.aggregationNote)
