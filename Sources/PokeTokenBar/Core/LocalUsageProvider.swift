@@ -32,7 +32,7 @@ struct LocalClaudeProvider: UsageProvider {
     }
 }
 
-/// 로컬 로그 직접 파싱 기반 Gemini CLI provider. (블록 없음 — Codex 와 동일 축약형)
+/// 로컬 로그 직접 파싱 기반 Gemini CLI provider.
 /// 세션이 ~/.gemini/tmp/<hash>/chats/ 에 있을 때만 데이터가 잡힌다(없으면 스냅샷 미생성 → UI 미표시).
 struct LocalGeminiProvider: UsageProvider {
     let id = "gemini"
@@ -50,6 +50,9 @@ struct LocalGeminiProvider: UsageProvider {
         let entries = await LocalUsageCache.shared.geminiEntries(modifiedSince: monthStart)
         let fmt = LocalUsageReader.localDayFormatter()
         var r = ProviderEnrichment()
+        // 블록(burn rate) 계산은 프로바이더 공통 — companion 리듬이 전 프로바이더를 따르게.
+        r.activeBlock = LocalUsageReader.activeBlock(entries: entries, now: now)
+        r.blocksOK = true
         let weekStart = LocalUsageReader.startOfWeek(now)
         r.weekTotal = LocalUsageReader.period(entries: entries, periodKey: fmt.string(from: weekStart),
                                               fromDay: fmt.string(from: weekStart), toDay: fmt.string(from: now))
@@ -60,7 +63,7 @@ struct LocalGeminiProvider: UsageProvider {
     }
 }
 
-/// 로컬 로그 직접 파싱 기반 Codex provider. (블록 없음, 주간 = 일별 합산)
+/// 로컬 로그 직접 파싱 기반 Codex provider. (주간 = 일별 합산)
 struct LocalCodexProvider: UsageProvider {
     let id = "codex"
     let displayName = "Codex"
@@ -81,6 +84,9 @@ struct LocalCodexProvider: UsageProvider {
         let entries = await LocalUsageCache.shared.codexEntries(modifiedSince: monthStart)
         let fmt = LocalUsageReader.localDayFormatter()
         var r = ProviderEnrichment()
+        // 블록(burn rate) 계산은 프로바이더 공통 — companion 리듬이 전 프로바이더를 따르게.
+        r.activeBlock = LocalUsageReader.activeBlock(entries: entries, now: now)
+        r.blocksOK = true
         let weekStart = LocalUsageReader.startOfWeek(now)
         let week = LocalUsageReader.period(entries: entries, periodKey: fmt.string(from: weekStart),
                                            fromDay: fmt.string(from: weekStart), toDay: fmt.string(from: now))

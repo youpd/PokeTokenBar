@@ -33,17 +33,8 @@ enum BinaryLocator {
     /// 해석된 바이너리의 디렉토리 + 버전매니저/Homebrew 공통 경로를 기존 PATH 앞에 붙인다.
     static func augmentedEnvironment(binaryPath: String,
                                      base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
-        let home = NSHomeDirectory()
-        var paths = [
-            URL(fileURLWithPath: binaryPath).deletingLastPathComponent().path,
-            "/opt/homebrew/bin",
-            "/usr/local/bin",
-            "\(home)/.local/bin",
-            "\(home)/.local/share/mise/shims",
-            "\(home)/.asdf/shims",
-            "\(home)/.volta/bin",
-            "\(home)/.bun/bin",
-        ]
+        var paths = [URL(fileURLWithPath: binaryPath).deletingLastPathComponent().path]
+        paths.append(contentsOf: commonToolDirectories())
         for entry in (base["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin").split(separator: ":") {
             paths.append(String(entry))
         }
@@ -60,20 +51,27 @@ enum BinaryLocator {
         cache.removeAll()
     }
 
-    /// 버전매니저 공통 shim/bin 경로 + 주어진 정적 경로. (절대경로 우선 탐색용)
-    static func commonNodeToolPaths(_ binary: String) -> [String] {
+    /// 버전매니저/패키지매니저 공통 bin·shim 디렉토리 — 탐색(commonNodeToolPaths)과
+    /// 자식 프로세스 PATH 보강(augmentedEnvironment)이 공유하는 단일 소스.
+    /// 새 버전매니저 지원 시 여기 한 곳만 추가하면 두 경로 모두에 반영된다.
+    static func commonToolDirectories() -> [String] {
         let home = NSHomeDirectory()
         return [
-            "/opt/homebrew/bin/\(binary)",                 // Homebrew (Apple Silicon)
-            "/usr/local/bin/\(binary)",                    // Homebrew (Intel) / npm prefix
-            "\(home)/.local/share/mise/shims/\(binary)",   // mise (shims 모드)
-            "\(home)/.asdf/shims/\(binary)",               // asdf
-            "\(home)/.volta/bin/\(binary)",                // Volta
-            "\(home)/.bun/bin/\(binary)",                  // Bun
-            "\(home)/.npm-global/bin/\(binary)",           // npm prefix=~/.npm-global
-            "\(home)/.local/bin/\(binary)",
-            "/usr/bin/\(binary)",
+            "/opt/homebrew/bin",                 // Homebrew (Apple Silicon)
+            "/usr/local/bin",                    // Homebrew (Intel) / npm prefix
+            "\(home)/.local/share/mise/shims",   // mise (shims 모드)
+            "\(home)/.asdf/shims",               // asdf
+            "\(home)/.volta/bin",                // Volta
+            "\(home)/.bun/bin",                  // Bun
+            "\(home)/.npm-global/bin",           // npm prefix=~/.npm-global
+            "\(home)/.local/bin",
+            "/usr/bin",
         ]
+    }
+
+    /// 버전매니저 공통 shim/bin 경로 + 주어진 정적 경로. (절대경로 우선 탐색용)
+    static func commonNodeToolPaths(_ binary: String) -> [String] {
+        commonToolDirectories().map { "\($0)/\(binary)" }
     }
 
     private static func locate(_ binary: String, staticPaths: [String]) -> String? {

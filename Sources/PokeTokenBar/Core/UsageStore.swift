@@ -17,6 +17,7 @@ final class UsageStore {
     private(set) var limits: LimitStatus?
     private(set) var codexLimits: CodexRateLimitStatus?
     private(set) var codexLimitsUpdatedAt: Date?
+    private(set) var limitsUpdatedAt: Date?
     private(set) var limitsAvailable = true
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
@@ -131,8 +132,15 @@ final class UsageStore {
     var monthTotalTokens: Int { snapshots.reduce(0) { $0 + ($1.monthTotal?.totalTokens ?? 0) } }
     var monthCostTotal: Double { snapshots.reduce(0) { $0 + ($1.monthTotal?.totalCost ?? 0) } }
 
+    /// Claude 의 활성 5h 블록 — 5h forecast·"현재 블록" 행은 Claude 공식 한도와 짝이므로
+    /// providerID 로 명시 조회한다 (전 프로바이더가 블록을 갖게 된 후 first-with-block 은 오매칭).
     private var claudeActiveBlock: BlockUsage? {
-        snapshots.first { $0.activeBlock != nil }?.activeBlock
+        snapshots.first { $0.providerID == "claude_code" }?.activeBlock
+    }
+
+    /// 전 프로바이더 활성 블록의 합산 burn (tokens/min) — companion 리듬 판정용.
+    private var combinedBurnPerMinute: Double {
+        snapshots.compactMap { $0.activeBlock?.tokensPerMinute }.reduce(0, +)
     }
 
     // MARK: 한도 소진 예측
@@ -183,8 +191,10 @@ final class UsageStore {
     }
 
     /// burn rate 티어 — companion 표시 상태(idle/working/focus) 판정에 사용.
+    /// 전 프로바이더 합산 — Codex/Gemini 전용 사용자도 코딩 리듬이 반영된다.
     var burnTier: BurnTier {
-        guard let burn = claudeActiveBlock?.tokensPerMinute, burn > 1_000 else { return .idle }
+        let burn = combinedBurnPerMinute
+        guard burn > 1_000 else { return .idle }
         if burn < 100_000 { return .normal }
         if burn < 400_000 { return .fast }
         return .blazing
@@ -401,6 +411,7 @@ final class UsageStore {
             do {
                 limits = try await limitsProvider.fetch(allowKeychainPrompt: false)
                 limitsAvailable = true
+                limitsUpdatedAt = Date()
                 resetLimitsBackoff()
                 AppLog.write("limits refreshed fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             } catch {
@@ -442,6 +453,7 @@ final class UsageStore {
             // 명시적 사용자 액션은 백오프를 우회해 1회 시도 — 성공하면 백오프 해제
             limits = try await limitsProvider.fetch(allowKeychainPrompt: true)
             limitsAvailable = true
+            limitsUpdatedAt = Date()
             limitTokenRefreshError = nil
             resetLimitsBackoff()
             AppLog.write("limits refreshed by user action fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
@@ -515,6 +527,13 @@ final class UsageStore {
     var codexLimitsStale: Bool {
         guard codexLimits != nil, let codexLimitsUpdatedAt else { return false }
         return Date().timeIntervalSince(codexLimitsUpdatedAt) > 15 * 60
+    }
+
+    /// Claude 한도 staleness — Codex 와 동일 임계(15분). 429 백오프(최대 60분)로 폴링이
+    /// 쉬는 동안 이전 스냅샷이 남는다는 사실을 노출한다 (프로바이더 간 표시 대칭).
+    var claudeLimitsStale: Bool {
+        guard limits != nil, let limitsUpdatedAt else { return false }
+        return Date().timeIntervalSince(limitsUpdatedAt) > 15 * 60
     }
 
     // MARK: 한도 알림 (ClaudeBar 임계값 패턴)

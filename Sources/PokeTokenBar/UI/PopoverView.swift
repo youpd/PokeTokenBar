@@ -234,6 +234,9 @@ struct PopoverView: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
             if selectedSnapshot?.providerID == "claude_code", let limits = store.limits {
+                if store.claudeLimitsStale {
+                    staleBadge(updatedAt: store.limitsUpdatedAt)
+                }
                 limitRow(name: l.fiveHourSession, window: limits.fiveHour)
                 forecastRow
                 limitRow(name: l.weekly, window: limits.sevenDay)
@@ -245,7 +248,8 @@ struct PopoverView: View {
                         name: l.claudeLimitEntry(kind: entry.kind, model: entry.scope?.model?.displayName),
                         window: LimitWindow(utilization: entry.percent, resetsAt: entry.resetsAt))
                 }
-                if let block = store.snapshots.first(where: { $0.activeBlock != nil })?.activeBlock,
+                // 전 프로바이더가 블록을 갖게 됨 — "Claude 현재 5h 블록" 행은 명시 조회
+                if let block = store.snapshots.first(where: { $0.providerID == "claude_code" })?.activeBlock,
                    let end = block.endDate {
                     HStack {
                         Text(l.claudeCurrentBlock)
@@ -325,12 +329,20 @@ struct PopoverView: View {
                         .foregroundStyle(.red)
                 }
                 // 갱신 실패가 15분+ 이어지면 이전 스냅샷임을 노출 (codex TUI stale 임계와 동일)
-                if store.codexLimitsStale, let updated = store.codexLimitsUpdatedAt {
-                    (Text(l.staleLimits) + Text(" · ") + Text(updated, style: .relative))
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                if store.codexLimitsStale {
+                    staleBadge(updatedAt: store.codexLimitsUpdatedAt)
                 }
             }
+        }
+    }
+
+    /// 한도 스냅샷 갱신 지연 배지 — Claude/Codex 공용 (마지막 성공 시각 상대 표시).
+    @ViewBuilder
+    private func staleBadge(updatedAt: Date?) -> some View {
+        if let updatedAt {
+            (Text(l.staleLimits) + Text(" · ") + Text(updatedAt, style: .relative))
+                .font(.caption)
+                .foregroundStyle(.orange)
         }
     }
 
