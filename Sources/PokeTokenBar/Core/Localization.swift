@@ -76,6 +76,12 @@ struct L {
     var refreshNow: String { t("지금 새로고침", "Refresh now", "今すぐ更新") }
     var updated: String { t("갱신", "Updated", "更新") }
     var settings: String { t("설정", "Settings", "設定") }
+    var back: String { t("뒤로", "Back", "戻る") }
+    var generalSectionTitle: String { t("일반", "General", "一般") }
+    var menuBarSectionTitle: String { t("메뉴바에 표시", "Show in menu bar", "メニューバーに表示") }
+    var advancedSectionTitle: String { t("고급", "Advanced", "詳細") }
+    var advancedDisclosureLabel: String { t("고급 설정 · 진단", "Advanced · diagnostics", "詳細設定・診断") }
+    var aboutSupportSectionTitle: String { t("정보 & 지원", "About & Support", "情報とサポート") }
     var quit: String { t("종료", "Quit", "終了") }
 
     // MARK: 설정
