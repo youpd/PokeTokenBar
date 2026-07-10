@@ -79,6 +79,9 @@ final class UsageStore {
     var localizationLanguage: AppLanguage = .systemDefault   // companion.language 로 재시드 전까지의 기본(실행순서 무관 안전)
 
     private let providers: [any UsageProvider]
+
+    /// 등록된 프로바이더 id 목록 — 확장 규약 레지스트리 무결성 테스트용.
+    var registeredProviderIDs: [String] { providers.map(\.id) }
     private let limitsProvider: any ClaudeLimitsProviding
     private let codexLimitsProvider: any CodexLimitsProviding
     /// 설정 저장소 — 테스트는 suite 를 주입해 실제 사용자 설정을 오염시키지 않는다.
