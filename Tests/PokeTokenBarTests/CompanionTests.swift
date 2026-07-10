@@ -59,7 +59,21 @@ struct StubProvider: PokeProviding {
     func baseSpeciesIndex() async throws -> [BaseSpecies] { [BaseSpecies(id: value.baseID, captureRate: 255)] }
 }
 
+// 테스트 스텁 공통 — base 판정을 주입 인덱스에서 파생. REST 폴백 경로는 실클라이언트만 override.
+extension PokeProviding {
+    func baseSpecies(id: Int) async throws -> BaseSpecies? {
+        try await baseSpeciesIndex().first { $0.id == id }
+    }
+}
+
 private enum PokeStubError: Error { case boom }
+
+/// GraphQL base 인덱스 장애 시뮬 — baseSpeciesIndex 는 throw(엔드포인트 다운), REST 폴백(baseSpecies)은 성공.
+private struct FallbackOnlyProvider: PokeProviding {
+    func line(baseSpeciesID: Int) async throws -> EvoLine { makeLine(base: baseSpeciesID, tree: node(baseSpeciesID)) }
+    func baseSpeciesIndex() async throws -> [BaseSpecies] { throw PokeStubError.boom }
+    func baseSpecies(id: Int) async throws -> BaseSpecies? { BaseSpecies(id: id, captureRate: 100) }
+}
 
 /// 샘플러 테스트용 — 주입한 base 인덱스 + 요청 id 그대로의 무진화 라인 반환.
 final class IndexProvider: PokeProviding, @unchecked Sendable {
@@ -145,6 +159,18 @@ final class CompanionStoreTests: XCTestCase {
         use(s, PokemonBalance.eggHatchThreshold + 500_000)   // 임계 초과 0.5M
         await s.hatchIfNeeded()
         XCTAssertEqual(s.state.active?.usedAtStage, 500_000)   // 초과분 이월
+    }
+
+    /// GraphQL base 인덱스 엔드포인트가 죽어도 REST 폴백으로 부화한다 (2026-07 실장애 회귀 방지).
+    func testEggHatchesViaRESTFallbackWhenIndexDown() async {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("poke-\(UUID().uuidString).json")
+        let s = CompanionStore(provider: FallbackOnlyProvider(),
+                               clock: { fixedNow }, fileURL: url, rng: SeededRNG(seed: 7))
+        base(s)
+        use(s, PokemonBalance.eggHatchThreshold)
+        await s.hatchIfNeeded()
+        XCTAssertNotNil(s.state.active, "인덱스 장애 시 REST 폴백으로 부화해야 함")
+        XCTAssertEqual(s.state.eggUsage, 0)
     }
 
     func testNewEggAfterGraduationReincubates() async {
