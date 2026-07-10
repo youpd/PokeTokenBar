@@ -2,6 +2,30 @@ import XCTest
 @testable import PokeTokenBar
 
 final class BinaryLocatorTests: XCTestCase {
+    /// mise shim 이 버전매니저 본체를 찾을 수 있도록 PATH 가 보강되는지 (버그 리포트 시나리오).
+    func testAugmentedEnvironmentPrependsToolPaths() {
+        let home = NSHomeDirectory()
+        let env = BinaryLocator.augmentedEnvironment(
+            binaryPath: "\(home)/.local/share/mise/shims/codex",
+            base: ["PATH": "/usr/bin:/bin", "LANG": "en_US.UTF-8"])
+        let paths = env["PATH"]!.split(separator: ":").map(String.init)
+
+        XCTAssertEqual(paths.first, "\(home)/.local/share/mise/shims")   // 바이너리 디렉토리 최우선
+        XCTAssertTrue(paths.contains("/opt/homebrew/bin"))               // mise 본체 위치 후보
+        XCTAssertTrue(paths.contains("\(home)/.local/bin"))
+        XCTAssertTrue(paths.contains("/usr/bin"))                        // 기존 PATH 보존
+        XCTAssertEqual(paths.filter { $0 == "\(home)/.local/share/mise/shims" }.count, 1)  // dedup
+        XCTAssertEqual(env["LANG"], "en_US.UTF-8")                       // 다른 env 보존
+    }
+
+    func testAugmentedEnvironmentWithoutBasePath() {
+        let env = BinaryLocator.augmentedEnvironment(
+            binaryPath: "/opt/homebrew/bin/codex", base: [:])
+        let paths = env["PATH"]!.split(separator: ":").map(String.init)
+        XCTAssertEqual(paths.first, "/opt/homebrew/bin")
+        XCTAssertTrue(paths.contains("/usr/bin"))   // 기본 PATH 폴백
+    }
+
     func testParsesCleanMarkedPath() {
         XCTAssertEqual(
             BinaryLocator.parseMarkedPath("<<<BIN:/opt/homebrew/bin/ccusage:BIN>>>"),
