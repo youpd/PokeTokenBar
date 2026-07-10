@@ -190,6 +190,9 @@ struct SettingsView: View {
                     footerLink("GitHub", "https://github.com/chattymin/PokeTokenBar")
                     Text("·")
                     footerLink("Web", "https://chattymin.github.io/PokeTokenBar/")
+                    Text("·")
+                    // 개발자 후원 — 기능 잠금·너지 없는 푸터 링크 (GitHub/Web 과 동급 톤 유지)
+                    footerLink("♥ Sponsor", "https://github.com/sponsors/chattymin")
                 }
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
