@@ -32,6 +32,20 @@ doc_check() {
       echo "  ⚠ README 에 '$pat' 잔존 — 제거된 항목인지 확인."; warn=1
     fi
   done
+  # UI 변경 → 스크린샷 staleness (실제 diff 상태 검증 — 수동 체크리스트가 통과의례로 묻히지 않게).
+  # 직전 릴리스 태그 이후 UI 소스가 바뀌었는데 assets 스크린샷이 안 바뀌었으면 README 이미지 stale 가능.
+  local last_tag ui_changed shot_changed
+  last_tag=$(git describe --tags --match "v*" --abbrev=0 2>/dev/null || echo "")
+  if [[ -n "$last_tag" ]]; then
+    ui_changed=$(git diff --name-only "$last_tag"..HEAD -- 'Sources/PokeTokenBar/UI/' 2>/dev/null)
+    shot_changed=$(git diff --name-only "$last_tag"..HEAD -- 'assets/settings*' 'assets/screenshot*' 'assets/menubar*' 'assets/shiny*' 2>/dev/null)
+    if [[ -n "$ui_changed" && -z "$shot_changed" ]]; then
+      echo "  ⚠ UI 소스가 $last_tag 이후 변경됐으나 스크린샷(assets/) 갱신 없음 — README 이미지 stale 가능:"
+      echo "$ui_changed" | sed 's/^/       /'
+      echo "     → 변경된 화면이면 assets 스크린샷 재생성 (README.md/ko/ja 각 언어)."
+      warn=1
+    fi
+  fi
   cat <<'CHECK'
   ─ 수동 체크리스트 (내용 변경 시 갱신) ─────────────────────────────
    [ ] README.md / .ko / .ja : 기능 목록·요구사항·데이터소스·스크린샷
