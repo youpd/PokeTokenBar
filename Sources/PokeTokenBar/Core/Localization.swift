@@ -34,12 +34,29 @@ struct L {
     var reset: String { t("리셋", "Reset", "リセット") }
     var limitReached: String { t("한도 도달", "Limit reached", "上限到達") }
     var personalSpendLimit: String { t("개인 사용 한도", "Personal spend limit", "個人利用上限") }
+    var staleLimits: String { t("갱신 지연", "Stale", "更新遅延") }
     func plan(_ p: String) -> String { t("플랜 \(p)", "Plan \(p)", "プラン \(p)") }
     func forecastReach(_ time: String) -> String {
         t("현재 속도면 \(time) 한도 도달", "At current rate, limit hit at \(time)", "現在のペースで \(time) に上限到達")
     }
     var forecastNoReach: String {
         t("현재 속도로는 리셋 전 한도 도달 없음", "Won't hit limit before reset at current rate", "現在のペースではリセット前に上限到達なし")
+    }
+
+    /// Claude oauth/usage 신형 limits[] 엔트리 이름 — kind + 모델 스코프 기반.
+    func claudeLimitEntry(kind: String?, model: String?) -> String {
+        switch kind {
+        case "session": return fiveHourSession
+        case "weekly_all": return weekly
+        case "weekly_scoped":
+            // 모델명이 없으면 레거시 "주간" 행과 이름이 겹치므로 scoped 임을 구분 표기
+            guard let model else { return t("주간 (모델별)", "Weekly (scoped)", "週間（モデル別）") }
+            return t("주간 \(model)", "Weekly \(model)", "週間 \(model)")
+        default:
+            let base = kind ?? "limit"
+            let name = model.map { " \($0)" } ?? ""
+            return base.replacingOccurrences(of: "_", with: " ") + name
+        }
     }
 
     /// Codex 한도 윈도우 이름 (windowDurationMins 기반). 알림·팝오버 공통.

@@ -222,7 +222,7 @@ struct PopoverView: View {
     private var selectedProviderHasLimits: Bool {
         switch selectedSnapshot?.providerID {
         case "claude_code": return store.limits != nil
-        case "codex": return store.codexLimits?.codex.hasVisibleLimit == true
+        case "codex": return store.codexLimits?.hasVisibleLimit == true
         default: return false
         }
     }
@@ -239,6 +239,12 @@ struct PopoverView: View {
                 limitRow(name: l.weekly, window: limits.sevenDay)
                 limitRow(name: l.weeklyOpus, window: limits.sevenDayOpus)
                 limitRow(name: l.weeklySonnet, window: limits.sevenDaySonnet)
+                // 신형 limits[] — 모델별 주간(weekly_scoped) 등 레거시 필드 밖 윈도우
+                ForEach(Array(limits.scopedLimitEntries.enumerated()), id: \.offset) { _, entry in
+                    limitRow(
+                        name: l.claudeLimitEntry(kind: entry.kind, model: entry.scope?.model?.displayName),
+                        window: LimitWindow(utilization: entry.percent, resetsAt: entry.resetsAt))
+                }
                 if let block = store.snapshots.first(where: { $0.activeBlock != nil })?.activeBlock,
                    let end = block.endDate {
                     HStack {
@@ -256,11 +262,21 @@ struct PopoverView: View {
                 }
             }
             if selectedSnapshot?.providerID == "codex",
-               let codex = store.codexLimits?.codex, codex.hasVisibleLimit {
-                codexMetaRow(codex)
-                codexLimitRow(name: l.codexWindow(codex.primary?.windowDurationMins), window: codex.primary)
-                codexLimitRow(name: l.codexWindow(codex.secondary?.windowDurationMins), window: codex.secondary)
-                codexSpendLimitRow(codex.individualLimit)
+               let codexStatus = store.codexLimits, codexStatus.hasVisibleLimit {
+                let buckets = codexStatus.visibleSnapshots
+                codexMetaRow(codexStatus)
+                ForEach(buckets, id: \.limitId) { bucket in
+                    // bucket 이 여럿일 때만 구분 라벨 (단일 bucket 사용자는 기존 UI 그대로)
+                    if buckets.count > 1 {
+                        Text(bucket.bucketDisplayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .padding(.top, 2)
+                    }
+                    codexLimitRow(name: l.codexWindow(bucket.primary?.windowDurationMins), window: bucket.primary)
+                    codexLimitRow(name: l.codexWindow(bucket.secondary?.windowDurationMins), window: bucket.secondary)
+                    codexSpendLimitRow(bucket.individualLimit)
+                }
             }
         }
     }
@@ -292,18 +308,27 @@ struct PopoverView: View {
     }
 
     @ViewBuilder
-    private func codexMetaRow(_ snapshot: CodexRateLimitSnapshot) -> some View {
-        if snapshot.planType != nil || snapshot.rateLimitReachedType != nil {
+    private func codexMetaRow(_ status: CodexRateLimitStatus) -> some View {
+        // plan 은 계정 속성 — bucket 필터와 무관하게 top-level 에서 읽는다 (로그와 동일 소스)
+        let planType = status.rateLimits.planType ?? status.visibleSnapshots.first?.planType
+        let reached = status.visibleSnapshots.contains { $0.rateLimitReachedType != nil }
+        if planType != nil || reached || store.codexLimitsStale {
             HStack(spacing: 8) {
-                if let plan = snapshot.planType {
+                if let plan = planType {
                     Text(l.plan(plan))
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                 }
-                if snapshot.rateLimitReachedType != nil {
+                if reached {
                     Text(l.limitReached)
                         .font(.caption)
                         .foregroundStyle(.red)
+                }
+                // 갱신 실패가 15분+ 이어지면 이전 스냅샷임을 노출 (codex TUI stale 임계와 동일)
+                if store.codexLimitsStale, let updated = store.codexLimitsUpdatedAt {
+                    (Text(l.staleLimits) + Text(" · ") + Text(updated, style: .relative))
+                        .font(.caption)
+                        .foregroundStyle(.orange)
                 }
             }
         }

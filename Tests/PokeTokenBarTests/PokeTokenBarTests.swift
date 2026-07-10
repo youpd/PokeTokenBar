@@ -175,6 +175,45 @@ final class ModelDecodingTests: XCTestCase {
         XCTAssertEqual(status.sevenDay?.utilization, 16.0)
     }
 
+    /// oauth/usage 신형 limits[] — 레거시 필드가 커버하는 session/weekly_all 은 제외,
+    /// weekly_scoped(모델별 주간)만 추가 노출 대상. (2026-07 실측 스키마 기반)
+    func testLimitStatusScopedEntries() throws {
+        let json = """
+        {"five_hour":{"utilization":32.0,"resets_at":"2026-07-10T04:10:00.497904+00:00"},
+        "seven_day":{"utilization":7.0,"resets_at":"2026-07-12T03:00:00.497928+00:00"},
+        "seven_day_opus":null,"seven_day_sonnet":null,
+        "limits":[
+        {"kind":"session","group":"session","percent":32,"severity":"normal","resets_at":"2026-07-10T04:10:00.497904+00:00","scope":null,"is_active":true},
+        {"kind":"weekly_all","group":"weekly","percent":7,"severity":"normal","resets_at":"2026-07-12T03:00:00.497928+00:00","scope":null,"is_active":false},
+        {"kind":"weekly_scoped","group":"weekly","percent":41,"severity":"normal","resets_at":"2026-07-12T03:00:00.498239+00:00","scope":{"model":{"id":null,"display_name":"Fable"},"surface":null},"is_active":false}
+        ]}
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(LimitStatus.self, from: json)
+
+        XCTAssertEqual(status.limits?.count, 3)
+        XCTAssertEqual(status.scopedLimitEntries.count, 1)
+        let scoped = try XCTUnwrap(status.scopedLimitEntries.first)
+        XCTAssertEqual(scoped.kind, "weekly_scoped")
+        XCTAssertEqual(scoped.percent, 41)
+        XCTAssertEqual(scoped.scope?.model?.displayName, "Fable")
+        XCTAssertNotNil(scoped.resetDate)
+    }
+
+    /// 레거시 필드가 전부 비면 limits[] 전체가 표시 대상 (신형 응답 전환 대비 폴백).
+    func testLimitStatusLegacyEmptyFallsBackToAllEntries() throws {
+        let json = """
+        {"five_hour":null,"seven_day":null,
+        "limits":[
+        {"kind":"session","group":"session","percent":10,"severity":"normal","resets_at":"2026-07-10T04:10:00+00:00","scope":null,"is_active":true},
+        {"kind":"weekly_all","group":"weekly","percent":5,"severity":"normal","resets_at":"2026-07-12T03:00:00+00:00","scope":null,"is_active":false}
+        ]}
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(LimitStatus.self, from: json)
+        XCTAssertEqual(status.scopedLimitEntries.count, 2)
+    }
+
     func testCodexRateLimitStatus() throws {
         let json = """
         {"rateLimits":{"limitId":"codex","limitName":null,
@@ -191,12 +230,62 @@ final class ModelDecodingTests: XCTestCase {
 
         let status = try JSONDecoder().decode(CodexRateLimitStatus.self, from: json)
 
-        XCTAssertEqual(status.codex.primary?.usedPercent, 86)
-        XCTAssertEqual(status.codex.primary?.displayName, "5시간 세션")
-        XCTAssertEqual(status.codex.secondary?.displayName, "주간")
-        XCTAssertEqual(status.codex.planType, "team")
+        // 단일 bucket — top-level 과 byLimitId["codex"] 가 같은 스냅샷이므로 1개로 dedup
+        XCTAssertEqual(status.snapshots.count, 1)
+        let codex = try XCTUnwrap(status.visibleSnapshots.first)
+        XCTAssertEqual(codex.primary?.usedPercent, 86)
+        XCTAssertEqual(codex.primary?.displayName, "5시간 세션")
+        XCTAssertEqual(codex.secondary?.displayName, "주간")
+        XCTAssertEqual(codex.planType, "team")
         XCTAssertTrue(status.hasVisibleLimit)
-        XCTAssertNotNil(status.codex.primary?.resetDate)
+        XCTAssertNotNil(codex.primary?.resetDate)
+        XCTAssertEqual(status.maxPrimaryUsedPercent, 86)
+    }
+
+    /// 다중 bucket 계정 (codex + codex_other) — 리포트된 버그 시나리오:
+    /// "codex" bucket 은 미사용(0%), 실사용은 codex_other(주간 93%). 두 bucket 모두 노출돼야 한다.
+    func testCodexRateLimitStatusMultiBucket() throws {
+        let json = """
+        {"rateLimits":{"limitId":"codex","limitName":null,
+        "primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1781694161},
+        "secondary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1781855658},
+        "credits":null,"individualLimit":null,"planType":"plus","rateLimitReachedType":null},
+        "rateLimitsByLimitId":{
+        "codex":{"limitId":"codex","limitName":null,
+        "primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1781694161},
+        "secondary":{"usedPercent":0,"windowDurationMins":10080,"resetsAt":1781855658},
+        "credits":null,"individualLimit":null,"planType":"plus","rateLimitReachedType":null},
+        "codex_other":{"limitId":"codex_other","limitName":"codex_other",
+        "primary":{"usedPercent":41,"windowDurationMins":300,"resetsAt":1781694161},
+        "secondary":{"usedPercent":93,"windowDurationMins":10080,"resetsAt":1781855658},
+        "credits":null,"individualLimit":null,"planType":"plus","rateLimitReachedType":null}}}
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(CodexRateLimitStatus.self, from: json)
+
+        XCTAssertEqual(status.snapshots.count, 2)
+        XCTAssertEqual(status.snapshots[0].limitId, "codex")          // top-level 우선
+        XCTAssertEqual(status.snapshots[1].limitId, "codex_other")
+        XCTAssertEqual(status.snapshots[1].secondary?.usedPercent, 93)
+        XCTAssertEqual(status.maxPrimaryUsedPercent, 41)              // 메뉴바 = bucket 최대값
+        XCTAssertEqual(status.snapshots[1].bucketDisplayName, "Codex other")
+        XCTAssertEqual(status.snapshots[0].bucketDisplayName, "Codex")
+    }
+
+    /// limitId 없는 구형 응답 — byLimitId["codex"] 가 top-level 과 동일 내용이면 중복 노출 금지.
+    func testCodexRateLimitStatusLegacyNilLimitIdDedup() throws {
+        let json = """
+        {"rateLimits":{"limitId":null,"limitName":null,
+        "primary":{"usedPercent":30,"windowDurationMins":300,"resetsAt":1},
+        "secondary":null,"credits":null,"individualLimit":null,"planType":null,"rateLimitReachedType":null},
+        "rateLimitsByLimitId":{"codex":{"limitId":null,"limitName":null,
+        "primary":{"usedPercent":30,"windowDurationMins":300,"resetsAt":1},
+        "secondary":null,"credits":null,"individualLimit":null,"planType":null,"rateLimitReachedType":null}}}
+        """.data(using: .utf8)!
+
+        let status = try JSONDecoder().decode(CodexRateLimitStatus.self, from: json)
+        XCTAssertEqual(status.snapshots.count, 1)
+        XCTAssertEqual(status.maxPrimaryUsedPercent, 30)
     }
 }
 

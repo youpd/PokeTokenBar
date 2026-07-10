@@ -16,6 +16,7 @@ final class UsageStore {
     private(set) var snapshots: [ProviderSnapshot] = []
     private(set) var limits: LimitStatus?
     private(set) var codexLimits: CodexRateLimitStatus?
+    private(set) var codexLimitsUpdatedAt: Date?
     private(set) var limitsAvailable = true
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
@@ -107,7 +108,7 @@ final class UsageStore {
             if let utilization = limits?.fiveHour?.utilization {
                 parts.append("Claude \(TokenFormatter.percent(utilization))")
             }
-            if let usedPercent = codexLimits?.codex.primary?.usedPercent {
+            if let usedPercent = codexLimits?.maxPrimaryUsedPercent {
                 parts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
             }
         }
@@ -169,12 +170,14 @@ final class UsageStore {
     /// 메뉴바 경고 상태 — 임계 초과 또는 리셋 전 한도 도달 예측
     var isLimitWarning: Bool {
         if let utilization = limits?.fiveHour?.utilization, utilization >= critThreshold { return true }
-        if let utilization = codexLimits?.codex.primary?.usedPercent,
-           Double(utilization) >= critThreshold { return true }
-        if let utilization = codexLimits?.codex.secondary?.usedPercent,
-           Double(utilization) >= critThreshold { return true }
-        if let utilization = codexLimits?.codex.individualLimit?.usedPercent,
-           Double(utilization) >= critThreshold { return true }
+        for bucket in codexLimits?.visibleSnapshots ?? [] {
+            if let utilization = bucket.primary?.usedPercent,
+               Double(utilization) >= critThreshold { return true }
+            if let utilization = bucket.secondary?.usedPercent,
+               Double(utilization) >= critThreshold { return true }
+            if let utilization = bucket.individualLimit?.usedPercent,
+               Double(utilization) >= critThreshold { return true }
+        }
         if let forecast = fiveHourForecast, forecast.beforeReset { return true }
         return false
     }
@@ -460,14 +463,25 @@ final class UsageStore {
     private func refreshCodexLimits() async {
         do {
             codexLimits = try await codexLimitsProvider.fetch()
-            if let codex = codexLimits?.codex {
-                AppLog.write("codex limits refreshed primary=\(codex.primary?.usedPercent.description ?? "nil") secondary=\(codex.secondary?.usedPercent.description ?? "nil") plan=\(codex.planType ?? "nil")")
+            if let status = codexLimits {
+                codexLimitsUpdatedAt = Date()
+                let buckets = status.snapshots.map { bucket in
+                    "\(bucket.limitId ?? "codex"): primary=\(bucket.primary?.usedPercent.description ?? "nil") secondary=\(bucket.secondary?.usedPercent.description ?? "nil")"
+                }.joined(separator: " | ")
+                AppLog.write("codex limits refreshed [\(buckets)] plan=\(status.rateLimits.planType ?? "nil")")
             } else {
                 AppLog.write("codex limits skipped: codex binary not found")
             }
         } catch {
             AppLog.write("codex limits unavailable: \(error)")
         }
+    }
+
+    /// codex 한도 스냅샷 staleness — 갱신 실패가 이어지면 이전 값이 남는다는 사실을 UI에 노출.
+    /// 임계 15분은 codex TUI `RATE_LIMIT_STALE_THRESHOLD_MINUTES` 와 동일.
+    var codexLimitsStale: Bool {
+        guard codexLimits != nil, let codexLimitsUpdatedAt else { return false }
+        return Date().timeIntervalSince(codexLimitsUpdatedAt) > 15 * 60
     }
 
     // MARK: 한도 알림 (ClaudeBar 임계값 패턴)
@@ -500,20 +514,21 @@ final class UsageStore {
                     limits.sevenDay?.resetsAt ?? "none"))
             }
         }
-        if let codex = codexLimits?.codex {
-            if let primary = codex.primary {
+        for bucket in codexLimits?.visibleSnapshots ?? [] {
+            let bucketName = bucket.bucketDisplayName   // "Codex" / "Codex other" 등
+            if let primary = bucket.primary {
                 windows.append((
-                    "Codex \(l.codexWindow(primary.windowDurationMins))",
+                    "\(bucketName) \(l.codexWindow(primary.windowDurationMins))",
                     Double(primary.usedPercent),
                     primary.resetsAt.map(String.init) ?? "none"))
             }
-            if let secondary = codex.secondary {
+            if let secondary = bucket.secondary {
                 windows.append((
-                    "Codex \(l.codexWindow(secondary.windowDurationMins))",
+                    "\(bucketName) \(l.codexWindow(secondary.windowDurationMins))",
                     Double(secondary.usedPercent),
                     secondary.resetsAt.map(String.init) ?? "none"))
             }
-            if let individual = codex.individualLimit {
+            if let individual = bucket.individualLimit {
                 windows.append((
                     l.codexPersonalLimit,
                     Double(individual.usedPercent),

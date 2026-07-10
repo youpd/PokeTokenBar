@@ -196,12 +196,55 @@ struct LimitStatus: Decodable, Sendable {
     var sevenDay: LimitWindow?
     var sevenDayOpus: LimitWindow?
     var sevenDaySonnet: LimitWindow?
+    var limits: [OAuthLimitEntry]?
 
     private enum CodingKeys: String, CodingKey {
         case fiveHour = "five_hour"
         case sevenDay = "seven_day"
         case sevenDayOpus = "seven_day_opus"
         case sevenDaySonnet = "seven_day_sonnet"
+        case limits
+    }
+
+    /// 레거시 필드가 못 담는 윈도우 — session(=five_hour)·weekly_all(=seven_day)은 레거시 행이
+    /// 이미 표시하므로 제외하고, weekly_scoped(모델별 주간) 등 나머지만 추가 노출.
+    /// 레거시 필드가 전부 비면(신형 응답만 오는 경우) limits 전체를 표시 대상으로 폴백.
+    var scopedLimitEntries: [OAuthLimitEntry] {
+        let entries = limits ?? []
+        if fiveHour == nil && sevenDay == nil { return entries }
+        return entries.filter { $0.kind != "session" && $0.kind != "weekly_all" }
+    }
+}
+
+/// oauth/usage 신형 `limits[]` 엔트리 — 레거시 five_hour/seven_day 를 일반화한 목록.
+/// 구 seven_day_opus/seven_day_sonnet 는 null 로 바뀌었고, 모델별 주간 한도는
+/// kind=weekly_scoped + scope.model.displayName 으로 여기에만 온다.
+struct OAuthLimitEntry: Decodable, Sendable {
+    var kind: String?
+    var group: String?
+    var percent: Double?
+    var severity: String?
+    var resetsAt: String?
+    var scope: Scope?
+    var isActive: Bool?
+
+    struct Scope: Decodable, Sendable {
+        var model: Model?
+        struct Model: Decodable, Sendable {
+            var displayName: String?
+            private enum CodingKeys: String, CodingKey { case displayName = "display_name" }
+        }
+    }
+
+    var resetDate: Date? {
+        guard let resetsAt else { return nil }
+        return ISO8601Parser.date(from: resetsAt)
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case kind, group, percent, severity, scope
+        case resetsAt = "resets_at"
+        case isActive = "is_active"
     }
 }
 
@@ -257,17 +300,44 @@ struct CodexRateLimitSnapshot: Decodable, Sendable {
     var hasVisibleLimit: Bool {
         primary != nil || secondary != nil || individualLimit != nil
     }
+
+    /// bucket 표시명 — limitName/limitId 기반 ("codex" → "Codex", "codex_other" → "Codex other").
+    var bucketDisplayName: String {
+        let raw = limitName ?? limitId ?? "codex"
+        let spaced = raw.replacingOccurrences(of: "_", with: " ")
+        return spaced.prefix(1).uppercased() + spaced.dropFirst()
+    }
 }
 
 struct CodexRateLimitStatus: Decodable, Sendable {
     var rateLimits: CodexRateLimitSnapshot
     var rateLimitsByLimitId: [String: CodexRateLimitSnapshot]?
 
-    var codex: CodexRateLimitSnapshot {
-        rateLimitsByLimitId?["codex"] ?? rateLimits
+    /// 전체 bucket 목록 — codex TUI `app_server_rate_limit_snapshots` 미러링.
+    /// 서버 top-level(rateLimits)은 "codex" bucket 우선이라 codex_other 등 나머지 bucket은
+    /// rateLimitsByLimitId 에만 있다. top-level + byLimitId 나머지를 limitId 기준 dedup 후 합성.
+    var snapshots: [CodexRateLimitSnapshot] {
+        var result = [rateLimits]
+        guard let byLimitId = rateLimitsByLimitId else { return result }
+        // 서버는 limitId 없는 스냅샷을 "codex" 키로 넣는다(account_processor.rs) —
+        // top-level 과 같은 키/ID 는 중복이므로 제외. 정렬은 dict 순서 비결정성 제거용.
+        let primaryKey = rateLimits.limitId ?? "codex"
+        for (limitId, snapshot) in byLimitId.sorted(by: { $0.key < $1.key }) {
+            if limitId == primaryKey { continue }
+            if let id = snapshot.limitId, id == rateLimits.limitId { continue }
+            result.append(snapshot)
+        }
+        return result
     }
 
-    var hasVisibleLimit: Bool { codex.hasVisibleLimit }
+    var visibleSnapshots: [CodexRateLimitSnapshot] { snapshots.filter(\.hasVisibleLimit) }
+
+    var hasVisibleLimit: Bool { !visibleSnapshots.isEmpty }
+
+    /// 메뉴바 표기·경고 판정용 — 전체 bucket 중 최대 5h(primary) 사용률.
+    var maxPrimaryUsedPercent: Int? {
+        visibleSnapshots.compactMap { $0.primary?.usedPercent }.max()
+    }
 }
 
 // MARK: - Provider snapshot
