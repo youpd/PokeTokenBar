@@ -238,6 +238,41 @@
     body { transition: none; }
   }
 
+  /* ---------- Guide (tabs) ---------- */
+  .tabbar { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; border-bottom: 1px solid var(--border); margin-bottom: 34px; }
+  .tabbar button {
+    appearance: none; background: transparent; border: none; color: var(--muted);
+    font: inherit; font-weight: 600; font-size: 0.96rem; padding: 12px 18px; cursor: pointer;
+    border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color .15s, border-color .15s;
+  }
+  .tabbar button:hover { color: var(--fg); }
+  .tabbar button[aria-selected="true"] { color: var(--red); border-bottom-color: var(--red); }
+  .tabpanel { display: none; }
+  .tabpanel.active { display: block; animation: gfade .25s ease; }
+  @keyframes gfade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .gtable { border-collapse: collapse; width: 100%; margin: 14px 0 4px; font-size: 0.93rem; }
+  .gtable th, .gtable td { border: 1px solid var(--border); padding: 9px 12px; text-align: left; }
+  .gtable th { background: var(--card-2); font-weight: 600; }
+  .gtable .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .calc { background: var(--bg-soft); border: 1px solid var(--border); border-radius: 14px; padding: 22px; margin-top: 18px; }
+  .calc .seg { flex-wrap: wrap; margin: 4px 8px 4px 0; }
+  .timeline { margin-top: 18px; }
+  .tl-row { display: grid; grid-template-columns: 22px 1fr auto; gap: 12px; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--border); }
+  .tl-row:last-child { border-bottom: none; }
+  .tl-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--red); align-self: center; }
+  .tl-dot.minor { background: var(--card-2); border: 2px solid var(--red); }
+  .tl-when { color: var(--red); font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .states { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  .state-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
+  .state-card .emo { font-size: 1.9rem; }
+  .state-card .when { color: var(--red); font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; display: block; margin-top: 6px; }
+  .state-card b { display: block; margin: 2px 0 4px; font-size: 1.02rem; }
+  .state-card p { color: var(--muted); font-size: 0.9rem; margin: 0; }
+  .gloop { display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 16px; font-weight: 600; font-size: 1.05rem; }
+  .gloop .ga { color: var(--red); }
+  @media (max-width: 820px) { .states { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 600px) { .states { grid-template-columns: 1fr; } }
+
   /* ---------- Responsive ---------- */
   @media (max-width: 900px) {
     .grid { grid-template-columns: 1fr 1fr; }
@@ -264,6 +299,7 @@
     <div class="nav-mid">
       <a href="#features" data-i18n="nav.features">Features</a>
       <a href="#companion" data-i18n="nav.companion">Companion</a>
+      <a href="#guide" data-i18n="nav.guide">Guide</a>
       <a href="#install" data-i18n="nav.install">Install</a>
     </div>
     <div class="nav-right">
@@ -399,6 +435,86 @@
   </div>
 </section>
 
+<!-- ===== Guide (tabs) ===== -->
+<section id="guide">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow" data-i18n="g.eyebrow">Field guide</span>
+      <h2 style="margin-top:16px" data-i18n="g.h2">How it grows — all the numbers</h2>
+      <p data-i18n="g.sub">How long it takes, what you'll see along the way, and what there is to collect — before you install.</p>
+    </div>
+
+    <div class="tabbar reveal" role="tablist">
+      <button role="tab" aria-selected="true" data-gtab="growth"><span data-i18n="g.t1">🐣 Growth &amp; costs</span></button>
+      <button role="tab" aria-selected="false" data-gtab="daily"><span data-i18n="g.t2">🎭 A day together</span></button>
+      <button role="tab" aria-selected="false" data-gtab="collect"><span data-i18n="g.t3">📕 Collection</span></button>
+    </div>
+
+    <div class="tabpanel active" id="gtab-growth">
+      <div class="panel">
+        <h3 data-i18n="g.costH">Tokens per evolution</h3>
+        <p class="muted" style="margin:6px 0 0;font-size:0.95rem" data-i18n="g.costSub">The rarer the Pokémon, the longer it stays with you. Later stages cost more (3-stage line shown).</p>
+        <table class="gtable">
+          <tr><th data-i18n="g.thRarity">Rarity</th><th class="num" data-i18n="g.thS1">Stage 1</th><th class="num" data-i18n="g.thS2">Stage 2</th><th class="num" data-i18n="g.thS3">Stage 3 (graduate)</th><th class="num" data-i18n="g.thTotal">Total</th></tr>
+          <tr><td><span class="pill" style="color:var(--muted)">Common</span></td><td class="num">125M</td><td class="num">250M</td><td class="num">375M</td><td class="num">750M</td></tr>
+          <tr><td><span class="pill" style="color:var(--green);border-color:rgba(63,185,80,0.4)">Uncommon</span></td><td class="num">312.5M</td><td class="num">625M</td><td class="num">937.5M</td><td class="num">1.875B</td></tr>
+          <tr><td><span class="pill" style="color:var(--blue);border-color:rgba(45,156,255,0.4)">Rare</span></td><td class="num">500M</td><td class="num">1B</td><td class="num">1.5B</td><td class="num">3B</td></tr>
+          <tr><td><span class="pill" style="color:var(--gold);border-color:rgba(244,196,48,0.45)">Legendary</span></td><td class="num">1B</td><td class="num">2B</td><td class="num">3B</td><td class="num">6B</td></tr>
+        </table>
+
+        <div class="calc">
+          <b data-i18n="g.calcH">How long on my pace?</b>
+          <p class="muted" style="margin:4px 0 10px;font-size:0.9rem" data-i18n="g.calcQ">How many AI-coding tokens do you burn per day? (total, including cache reads)</p>
+          <span class="seg" id="gPace">
+            <button data-v="10"><span data-i18n="g.p1">Light · 10M/day</span></button>
+            <button data-v="40" class="active"><span data-i18n="g.p2">Steady · 40M/day</span></button>
+            <button data-v="120"><span data-i18n="g.p3">Heavy · 120M/day</span></button>
+            <button data-v="300"><span data-i18n="g.p4">Agent fleet · 300M/day</span></button>
+          </span>
+          <span class="seg" id="gRarity">
+            <button data-v="common" class="active">Common</button>
+            <button data-v="uncommon">Uncommon</button>
+            <button data-v="rare">Rare</button>
+            <button data-v="legendary">Legendary</button>
+          </span>
+          <div class="timeline" id="gTimeline"></div>
+        </div>
+        <p class="note" data-i18n="g.honest">Every number on this page is hard-coded in the app. No server, no purchases, no shortcuts — just code.</p>
+      </div>
+    </div>
+
+    <div class="tabpanel" id="gtab-daily">
+      <p class="muted" style="text-align:center;max-width:56ch;margin:0 auto 22px" data-i18n="g.dailyIntro">The companion in your menu bar isn't a decoration — it lives your coding rhythm, switching sprites and captions in real time.</p>
+      <div class="states">
+        <div class="state-card"><span class="emo">💤</span><span class="when" data-i18n="g.st1w">no tokens today</span><b data-i18n="g.st1t">Fast asleep</b><p data-i18n="g.st1d">When you rest, it rests. Weekend menu bars are quiet.</p></div>
+        <div class="state-card"><span class="emo">🧍</span><span class="when" data-i18n="g.st2w">light use</span><b data-i18n="g.st2t">Loafing around</b><p data-i18n="g.st2d">A few questions here and there — it idles beside you.</p></div>
+        <div class="state-card"><span class="emo">🚶</span><span class="when" data-i18n="g.st3w">coding steadily</span><b data-i18n="g.st3t">Working along</b><p data-i18n="g.st3d">Your normal pace. It keeps busy too.</p></div>
+        <div class="state-card"><span class="emo">🔥</span><span class="when" data-i18n="g.st4w">100k+ tokens/min</span><b data-i18n="g.st4t">In the zone</b><p data-i18n="g.st4d">Agents running hot — so is your partner.</p></div>
+        <div class="state-card"><span class="emo">😮‍💨</span><span class="when" data-i18n="g.st5w">limit almost reached</span><b data-i18n="g.st5t">Worn out</b><p data-i18n="g.st5d">When a usage limit is close, it tires before you do. Take the hint.</p></div>
+        <div class="state-card"><span class="emo">🎉</span><span class="when" data-i18n="g.st6w">evolution · graduation</span><b data-i18n="g.st6t">Celebrating</b><p data-i18n="g.st6d">Evolution moments and a graduation send-off — a few seconds worth catching.</p></div>
+      </div>
+      <p class="note" style="text-align:center" data-i18n="g.dailyNote">Hatching has its own animation — and a 1-in-64 shiny hatch announces itself.</p>
+    </div>
+
+    <div class="tabpanel" id="gtab-collect">
+      <div class="panel">
+        <div class="gloop"><span>🥚</span><span class="ga">→</span><span>🐣</span><span class="ga">→</span><span>⚡️</span><span class="ga">→</span><span>🎓</span><span class="ga">→</span><span>🥚</span></div>
+        <p class="muted" style="text-align:center;margin:0 0 8px" data-i18n="g.loop">Not an ending — a loop. Every graduation fills a Pokédex slot and a new egg arrives.</p>
+        <table class="gtable">
+          <tr><th data-i18n="g.cWhat">To collect</th><th data-i18n="g.cHow">How it works</th></tr>
+          <tr><td><b data-i18n="g.c1k">Species</b></td><td data-i18n="g.c1v">329 from Generations I–V — every hatch is random. You won't know until it cracks.</td></tr>
+          <tr><td><b data-i18n="g.c2k">Rarities</b></td><td data-i18n="g.c2v">Four tiers, Common to Legendary — the rare ones hatch rarely and stay longest.</td></tr>
+          <tr><td><b>✨ Shiny</b></td><td data-i18n="g.c3v">1 in 64 hatches — distinct colors, kept through every evolution.</td></tr>
+          <tr><td><b data-i18n="g.c4k">Natures</b></td><td data-i18n="g.c4v">One of 25 per hatch — the same species never feels quite the same.</td></tr>
+          <tr><td><b data-i18n="g.c5k">Branches</b></td><td data-i18n="g.c5v">Branching lines prefer a branch you haven't collected — the Pokédex fills itself as you keep raising.</td></tr>
+          <tr><td><b data-i18n="g.c6k">Pokédex</b></td><td data-i18n="g.c6v">Recorded as (starter → final form) pairs with the full line — same starter, different branch, different entry.</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+</section>
+
+
 <!-- ===== Install ===== -->
 <section id="install">
   <div class="wrap">
@@ -480,6 +596,33 @@
       "req.head": "Requirements", "req.macos": "14+ (Apple Silicon or Intel)",
       "req.providersK": "Claude / Codex / Gemini", "req.providers": "at least one, for usage to show", "req.keychain": "optional — only for official limit %",
       "req.note": "On-device. The app reads your local Claude Code / Codex / Gemini CLI logs — it never runs claude/codex model turns. Pokémon data & sprites are fetched at runtime from PokéAPI and cached locally; nothing copyrighted is bundled.",
+      "nav.guide": "Guide",
+      "g.eyebrow": "Field guide", "g.h2": "How it grows — all the numbers",
+      "g.sub": "How long it takes, what you'll see along the way, and what there is to collect — before you install.",
+      "g.t1": "🐣 Growth & costs", "g.t2": "🎭 A day together", "g.t3": "📕 Collection",
+      "g.costH": "Tokens per evolution",
+      "g.costSub": "The rarer the Pokémon, the longer it stays with you. Later stages cost more (3-stage line shown).",
+      "g.thRarity": "Rarity", "g.thS1": "Stage 1", "g.thS2": "Stage 2", "g.thS3": "Stage 3 (graduate)", "g.thTotal": "Total",
+      "g.calcH": "How long on my pace?",
+      "g.calcQ": "How many AI-coding tokens do you burn per day? (total, including cache reads)",
+      "g.p1": "Light · 10M/day", "g.p2": "Steady · 40M/day", "g.p3": "Heavy · 120M/day", "g.p4": "Agent fleet · 300M/day",
+      "g.honest": "Every number on this page is hard-coded in the app. No server, no purchases, no shortcuts — just code.",
+      "g.dailyIntro": "The companion in your menu bar isn't a decoration — it lives your coding rhythm, switching sprites and captions in real time.",
+      "g.st1w": "no tokens today", "g.st1t": "Fast asleep", "g.st1d": "When you rest, it rests. Weekend menu bars are quiet.",
+      "g.st2w": "light use", "g.st2t": "Loafing around", "g.st2d": "A few questions here and there — it idles beside you.",
+      "g.st3w": "coding steadily", "g.st3t": "Working along", "g.st3d": "Your normal pace. It keeps busy too.",
+      "g.st4w": "100k+ tokens/min", "g.st4t": "In the zone", "g.st4d": "Agents running hot — so is your partner.",
+      "g.st5w": "limit almost reached", "g.st5t": "Worn out", "g.st5d": "When a usage limit is close, it tires before you do. Take the hint.",
+      "g.st6w": "evolution · graduation", "g.st6t": "Celebrating", "g.st6d": "Evolution moments and a graduation send-off — a few seconds worth catching.",
+      "g.dailyNote": "Hatching has its own animation — and a 1-in-64 shiny hatch announces itself.",
+      "g.loop": "Not an ending — a loop. Every graduation fills a Pokédex slot and a new egg arrives.",
+      "g.cWhat": "To collect", "g.cHow": "How it works",
+      "g.c1k": "Species", "g.c1v": "329 from Generations I–V — every hatch is random. You won't know until it cracks.",
+      "g.c2k": "Rarities", "g.c2v": "Four tiers, Common to Legendary — the rare ones hatch rarely and stay longest.",
+      "g.c3v": "1 in 64 hatches — distinct colors, kept through every evolution.",
+      "g.c4k": "Natures", "g.c4v": "One of 25 per hatch — the same species never feels quite the same.",
+      "g.c5k": "Branches", "g.c5v": "Branching lines prefer a branch you haven't collected — the Pokédex fills itself as you keep raising.",
+      "g.c6k": "Pokédex", "g.c6v": "Recorded as (starter → final form) pairs with the full line — same starter, different branch, different entry.",
       "foot.disclaimer": "Pokémon data & sprites by PokéAPI. This is an unofficial, non-commercial fan project. It is not affiliated with, endorsed, sponsored, or approved by Nintendo, Game Freak, or The Pokémon Company. Pokémon and Pokémon character names are trademarks of Nintendo; names, data, and sprites are © Nintendo / Game Freak / The Pokémon Company, used at runtime for identification only. The MIT license covers this project's source code only."
     },
     ko: {
@@ -513,6 +656,33 @@
       "req.head": "필요 환경", "req.macos": "14 이상 (Apple Silicon·Intel)",
       "req.providersK": "Claude·Codex·Gemini", "req.providers": "하나만 있어도 사용량이 표시돼요", "req.keychain": "선택 — 공식 한도(%)를 볼 때만",
       "req.note": "모든 처리는 기기 안에서 끝나요. 앱은 로컬 Claude Code/Codex/Gemini CLI 로그를 직접 읽을 뿐, claude·codex 모델을 직접 돌리지 않아요. 포켓몬 데이터·스프라이트는 PokéAPI에서 실시간으로 받아 로컬에만 저장하고, 저작물은 번들하지 않습니다.",
+      "nav.guide": "가이드",
+      "g.eyebrow": "필드 가이드", "g.h2": "어떻게 자라나요 — 숫자 전부 공개",
+      "g.sub": "얼마나 걸리는지, 어떤 모습을 보게 되는지, 뭘 모으게 되는지 — 설치 전에 미리 보여드려요.",
+      "g.t1": "🐣 성장 & 진화 비용", "g.t2": "🎭 파트너의 하루", "g.t3": "📕 수집",
+      "g.costH": "진화에 필요한 토큰",
+      "g.costSub": "희귀할수록 오래 함께해요. 단계가 올라갈수록 더 많은 토큰이 들죠 (3단계 진화 라인 기준).",
+      "g.thRarity": "희귀도", "g.thS1": "1단계", "g.thS2": "2단계", "g.thS3": "3단계 (졸업)", "g.thTotal": "총량",
+      "g.calcH": "내 페이스로는 얼마나 걸릴까?",
+      "g.calcQ": "하루에 AI 코딩 토큰을 얼마나 쓰시나요? (캐시 읽기 포함 총량)",
+      "g.p1": "가볍게 · 10M/일", "g.p2": "보통 · 40M/일", "g.p3": "헤비 · 120M/일", "g.p4": "에이전트 군단 · 300M/일",
+      "g.honest": "이 페이지의 모든 숫자는 앱 코드에 그대로 들어 있어요. 서버도, 과금도, 지름길도 없습니다 — 오직 코딩만.",
+      "g.dailyIntro": "메뉴바의 파트너는 장식이 아니에요. 당신의 코딩 리듬을 그대로 살아요 — 스프라이트와 문구가 실시간으로 바뀝니다.",
+      "g.st1w": "오늘 사용량 0", "g.st1t": "쿨쿨", "g.st1d": "당신이 쉬면 파트너도 자요. 주말의 메뉴바는 조용하답니다.",
+      "g.st2w": "가끔 한 번씩", "g.st2t": "느긋", "g.st2d": "가볍게 몇 번 물어본 날엔 옆에서 어슬렁거려요.",
+      "g.st3w": "꾸준히 코딩 중", "g.st3t": "같이 일하는 중", "g.st3d": "평소 페이스. 파트너도 부지런히 움직여요.",
+      "g.st4w": "분당 10만 토큰 이상", "g.st4t": "몰입", "g.st4d": "에이전트가 달리고 있을 때 — 파트너도 달아올라요.",
+      "g.st5w": "한도 임박", "g.st5t": "지침", "g.st5d": "사용 한도가 코앞이면 파트너가 먼저 지쳐요. 눈치채 주세요.",
+      "g.st6w": "진화 · 졸업 직후", "g.st6t": "축하", "g.st6d": "진화 순간과 졸업 연출 — 놓치기 아까운 몇 초예요.",
+      "g.dailyNote": "부화 순간엔 전용 연출이 있고, 64분의 1로 색이 다른 개체가 나오면 연출부터 달라요.",
+      "g.loop": "끝이 아니라 루프예요. 졸업할 때마다 도감이 한 칸 채워지고, 새 알이 도착합니다.",
+      "g.cWhat": "모을 것", "g.cHow": "어떻게",
+      "g.c1k": "종", "g.c1v": "1~5세대 329종 — 부화마다 랜덤이에요. 깨보기 전엔 몰라요.",
+      "g.c2k": "희귀도", "g.c2v": "Common부터 Legendary까지 4등급 — 희귀할수록 드물게 나오고, 오래 함께해요.",
+      "g.c3v": "부화 64번 중 1번 — 전용 색상, 진화해도 유지돼요.",
+      "g.c4k": "성격", "g.c4v": "부화마다 25종 중 하나 — 같은 종이라도 느낌이 달라요.",
+      "g.c5k": "분기 진화", "g.c5v": "진화가 갈라지는 종은 아직 도감에 없는 쪽을 우선해요 — 키울수록 도감이 알아서 채워집니다.",
+      "g.c6k": "도감", "g.c6v": "(시작 종 → 최종형) 쌍으로 기록되고 진화 라인 전체가 남아요. 같은 시작 종도 분기가 다르면 별개 항목.",
       "foot.disclaimer": "포켓몬 데이터·스프라이트는 PokéAPI를 사용합니다. 본 프로젝트는 비공식·비상업 팬 프로젝트로, Nintendo·Game Freak·The Pokémon Company와 제휴하거나 보증·후원·승인을 받지 않았습니다. ‘Pokémon’과 포켓몬 캐릭터 이름은 Nintendo의 상표이며, 이름·데이터·스프라이트의 저작권은 © Nintendo / Game Freak / The Pokémon Company에 있고 식별 목적으로만 런타임에 사용됩니다. MIT 라이선스는 본 프로젝트의 소스 코드에만 적용됩니다."
     },
     ja: {
@@ -546,6 +716,33 @@
       "req.head": "動作環境", "req.macos": "14 以降（Apple Silicon・Intel）",
       "req.providersK": "Claude・Codex・Gemini", "req.providers": "ひとつだけでも使用量を表示", "req.keychain": "任意 — 公式の上限(%)を見るときだけ",
       "req.note": "処理はすべて端末内で完結。アプリはローカルの Claude Code / Codex / Gemini CLI ログを直接読み取るだけで、claude・codex のモデルは実行しません。ポケモンのデータ・スプライトは PokéAPI からリアルタイムに取得してローカルにのみ保存し、著作物はバンドルしません。",
+      "nav.guide": "ガイド",
+      "g.eyebrow": "フィールドガイド", "g.h2": "どう育つ？ — 数字をぜんぶ公開",
+      "g.sub": "どれくらいかかるのか、どんな姿が見られるのか、何を集められるのか — インストール前にお見せします。",
+      "g.t1": "🐣 成長 & 進化コスト", "g.t2": "🎭 パートナーの一日", "g.t3": "📕 コレクション",
+      "g.costH": "進化に必要なトークン",
+      "g.costSub": "レアなほど長く一緒にいられます。後の段階ほどコストが増えます（3段階の進化ライン基準）。",
+      "g.thRarity": "レア度", "g.thS1": "段階 1", "g.thS2": "段階 2", "g.thS3": "段階 3（卒業）", "g.thTotal": "合計",
+      "g.calcH": "自分のペースだとどれくらい？",
+      "g.calcQ": "1日にAIコーディングトークンをどれくらい使いますか？（キャッシュ読み込み込みの総量）",
+      "g.p1": "ライト · 10M/日", "g.p2": "ふつう · 40M/日", "g.p3": "ヘビー · 120M/日", "g.p4": "エージェント艦隊 · 300M/日",
+      "g.honest": "このページの数字はすべてアプリのコードにそのまま入っています。サーバーも課金も近道もなし — コードだけ。",
+      "g.dailyIntro": "メニューバーのパートナーは飾りではありません。あなたのコーディングのリズムをそのまま生きています — スプライトとキャプションがリアルタイムに変わります。",
+      "g.st1w": "今日の使用量 0", "g.st1t": "ぐっすり", "g.st1d": "あなたが休めばパートナーも眠ります。週末のメニューバーは静かです。",
+      "g.st2w": "ときどき使う", "g.st2t": "のんびり", "g.st2d": "軽く数回聞いた日は、そばでうろうろ。",
+      "g.st3w": "コツコツ作業中", "g.st3t": "いっしょに仕事中", "g.st3d": "いつものペース。パートナーもせっせと動きます。",
+      "g.st4w": "毎分10万トークン以上", "g.st4t": "ゾーンに突入", "g.st4d": "エージェントが全力疾走中 — パートナーも燃えています。",
+      "g.st5w": "上限が目前", "g.st5t": "へとへと", "g.st5d": "使用上限が近づくと、あなたより先に疲れます。察してあげてください。",
+      "g.st6w": "進化 · 卒業の直後", "g.st6t": "お祝い", "g.st6d": "進化の瞬間と卒業の演出 — 見逃すには惜しい数秒です。",
+      "g.dailyNote": "孵化には専用の演出があり、64分の1の色違いは演出からして違います。",
+      "g.loop": "終わりではなくループ。卒業のたびに図鑑が1マス埋まり、新しいタマゴが届きます。",
+      "g.cWhat": "集めるもの", "g.cHow": "しくみ",
+      "g.c1k": "種族", "g.c1v": "第1〜5世代の329種 — 孵化のたびにランダム。割れるまでわかりません。",
+      "g.c2k": "レア度", "g.c2v": "Common から Legendary の4段階 — レアなほど出にくく、長く一緒にいられます。",
+      "g.c3v": "孵化64回に1回 — 専用カラーで、進化しても維持されます。",
+      "g.c4k": "せいかく", "g.c4v": "孵化ごとに25種類からひとつ — 同じ種族でも印象が変わります。",
+      "g.c5k": "分岐進化", "g.c5v": "進化が分かれる種族は、まだ図鑑にない方を優先 — 育てるほど図鑑がひとりでに埋まります。",
+      "g.c6k": "図鑑", "g.c6v": "（最初の種族 → 最終形）のペアで記録され、進化ライン全体が残ります。同じ種族でも分岐が違えば別エントリー。",
       "foot.disclaimer": "ポケモンのデータ・スプライトは PokéAPI を使用しています。本プロジェクトは非公式・非商用のファンプロジェクトであり、任天堂・ゲームフリーク・株式会社ポケモンとの提携、推奨、後援、承認はありません。「ポケモン」およびポケモンのキャラクター名は任天堂の商標であり、名前・データ・スプライトの著作権は © Nintendo / Game Freak / The Pokémon Company に帰属し、識別目的でランタイムに利用しています。MIT ライセンスは本プロジェクトのソースコードのみを対象とします。"
     }
   };
@@ -613,6 +810,57 @@
   } else {
     document.querySelectorAll('.reveal').forEach(function (el) { el.classList.add('in'); });
   }
+</script>
+<script>
+  // ===== Guide tabs + journey calculator =====
+  document.querySelectorAll('[data-gtab]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      document.querySelectorAll('[data-gtab]').forEach(function (b) { b.setAttribute('aria-selected', 'false'); });
+      document.querySelectorAll('.tabpanel').forEach(function (p) { p.classList.remove('active'); });
+      btn.setAttribute('aria-selected', 'true');
+      document.getElementById('gtab-' + btn.getAttribute('data-gtab')).classList.add('active');
+    });
+  });
+
+  // Same formulas as the app: hatch 5M; stage i of a k-stage line costs total × i ÷ (k(k+1)/2)
+  var G_HATCH = 5e6, G_K = 3, G_DENOM = 6;
+  var G_TOTALS = { common: 750e6, uncommon: 1.875e9, rare: 3e9, legendary: 6e9 };
+  var G_STR = {
+    en: { hatch: '🐣 Hatch', evo: function (i) { return '⚡️ Evolution ' + i; }, grad: '🎓 Graduate — Pokédex entry, new egg', day1: 'day one', day: function (n) { return 'day ' + n; }, mo: function (m) { return '~' + m + ' months in'; }, yr: function (y) { return '~' + y + ' years in'; } },
+    ko: { hatch: '🐣 부화', evo: function (i) { return '⚡️ ' + i + '차 진화'; }, grad: '🎓 졸업 — 도감 등록, 새 알 도착', day1: '첫날', day: function (n) { return n + '일째'; }, mo: function (m) { return '약 ' + m + '개월째'; }, yr: function (y) { return '약 ' + y + '년째'; } },
+    ja: { hatch: '🐣 孵化', evo: function (i) { return '⚡️ 進化 ' + i; }, grad: '🎓 卒業 — 図鑑登録、新しいタマゴ', day1: '初日', day: function (n) { return n + '日目'; }, mo: function (m) { return '約' + m + 'か月目'; }, yr: function (y) { return '約' + y + '年目'; } }
+  };
+  var gPace = 40, gRar = 'common';
+  function gDays(tokens, s) {
+    var d = tokens / (gPace * 1e6);
+    if (d <= 1) return s.day1;
+    if (d < 60) return s.day(Math.ceil(d));
+    if (d < 365) return s.mo(Math.round(d / 30));
+    return s.yr((d / 365).toFixed(1).replace(/\.0$/, ''));
+  }
+  function gRender() {
+    var s = G_STR[document.documentElement.lang] || G_STR.en;
+    var total = G_TOTALS[gRar], cum = G_HATCH, rows = [{ l: s.hatch, cum: cum, minor: false }];
+    for (var i = 1; i <= G_K; i++) {
+      cum += total * i / G_DENOM;
+      rows.push({ l: i < G_K ? s.evo(i) : s.grad, cum: cum, minor: i < G_K });
+    }
+    document.getElementById('gTimeline').innerHTML = rows.map(function (r) {
+      return '<div class="tl-row"><span class="tl-dot' + (r.minor ? ' minor' : '') + '"></span><span>' + r.l + '</span><span class="tl-when">' + gDays(r.cum, s) + '</span></div>';
+    }).join('');
+  }
+  function gSeg(id, fn) {
+    document.getElementById(id).addEventListener('click', function (e) {
+      var b = e.target.closest('button'); if (!b) return;
+      document.querySelectorAll('#' + id + ' button').forEach(function (x) { x.classList.remove('active'); });
+      b.classList.add('active'); fn(b.getAttribute('data-v')); gRender();
+    });
+  }
+  gSeg('gPace', function (v) { gPace = +v; });
+  gSeg('gRarity', function (v) { gRar = v; });
+  // 언어 전환 시 타임라인 문자열도 재렌더 (기존 applyLang 이후 실행되도록 defer)
+  document.getElementById('langSeg').addEventListener('click', function () { setTimeout(gRender, 0); });
+  gRender();
 </script>
 </body>
 </html>
