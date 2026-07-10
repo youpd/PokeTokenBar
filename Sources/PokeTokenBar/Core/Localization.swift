@@ -236,6 +236,11 @@ struct L {
           "Couldn't fetch Claude limits. Please try again shortly.",
           "Claude の上限取得に失敗しました。しばらくして再試行してください。")
     }
+    var limitRefreshRateLimited: String {
+        t("Claude 한도 조회가 일시 제한됐어요 (429). 잠시 쉬었다가 자동으로 재시도합니다.",
+          "Claude limit checks are temporarily rate-limited (429). Backing off and retrying automatically.",
+          "Claude の上限取得が一時的に制限されています (429)。少し待って自動的に再試行します。")
+    }
 
     // MARK: 업데이트 알림
     func updateAvailable(_ version: String, current: String) -> String {

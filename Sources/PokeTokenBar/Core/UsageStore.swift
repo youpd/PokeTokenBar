@@ -394,14 +394,19 @@ final class UsageStore {
             limits = nil
             limitsAvailable = false
             AppLog.write("claude limits skipped: keychain access disabled")
+        } else if let until = claudeLimitsBackoffUntil, Date() < until {
+            // 429 백오프 중 — 폴링을 쉬어 rate limit 악화 방지 (버그 리포트 실측: 매분 429 재시도)
+            AppLog.write("claude limits backoff: skipping (\(Int(until.timeIntervalSinceNow))s left)")
         } else {
             do {
                 limits = try await limitsProvider.fetch(allowKeychainPrompt: false)
                 limitsAvailable = true
+                resetLimitsBackoff()
                 AppLog.write("limits refreshed fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             } catch {
                 // 비공식 endpoint 실패 → 섹션 숨김, 토큰 표시는 무영향
                 if limits == nil { limitsAvailable = false }
+                applyLimitsBackoffIfRateLimited(error)
                 AppLog.write("limits unavailable: \(error)")
             }
         }
@@ -434,16 +439,42 @@ final class UsageStore {
         defer { isRefreshingLimitToken = false }
 
         do {
+            // 명시적 사용자 액션은 백오프를 우회해 1회 시도 — 성공하면 백오프 해제
             limits = try await limitsProvider.fetch(allowKeychainPrompt: true)
             limitsAvailable = true
             limitTokenRefreshError = nil
+            resetLimitsBackoff()
             AppLog.write("limits refreshed by user action fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             AppLog.write("limits refreshed from keychain by user action")
         } catch {
             limitTokenRefreshError = Self.friendlyLimitError(error, L(localizationLanguage))
             if limits == nil { limitsAvailable = false }
+            applyLimitsBackoffIfRateLimited(error)
             AppLog.write("limits user refresh failed: \(error)")
         }
+    }
+
+    // MARK: Claude 한도 429 백오프
+
+    private var claudeLimitsBackoffUntil: Date?
+    private var claudeLimitsBackoffInterval: TimeInterval = 0
+
+    /// 429 시 지수 백오프: 5분 → 10분 → … → 최대 60분. Retry-After 가 오면 그 값 우선.
+    private func applyLimitsBackoffIfRateLimited(_ error: any Error) {
+        guard case LimitsError.rateLimited(let retryAfter) = error else { return }
+        claudeLimitsBackoffInterval = Self.nextLimitsBackoff(after: claudeLimitsBackoffInterval)
+        let delay = retryAfter ?? claudeLimitsBackoffInterval
+        claudeLimitsBackoffUntil = Date().addingTimeInterval(delay)
+        AppLog.write("claude limits rate-limited: backing off \(Int(delay))s")
+    }
+
+    private func resetLimitsBackoff() {
+        claudeLimitsBackoffUntil = nil
+        claudeLimitsBackoffInterval = 0
+    }
+
+    nonisolated static func nextLimitsBackoff(after current: TimeInterval) -> TimeInterval {
+        current == 0 ? 300 : min(current * 2, 3600)
     }
 
     /// 한도 갱신 실패를 사용자 친화 메시지로 변환. Codex만 쓰는 사용자는 401 이 정상이라,
@@ -451,6 +482,8 @@ final class UsageStore {
     static func friendlyLimitError(_ error: any Error, _ l: L) -> String {
         guard let limitsError = error as? LimitsError else { return l.limitRefreshGeneric }
         switch limitsError {
+        case .rateLimited:
+            return l.limitRefreshRateLimited
         case .httpStatus(let status):
             return l.limitRefreshHTTPError(status)
         case .keychainUnavailable, .credentialFormat:
