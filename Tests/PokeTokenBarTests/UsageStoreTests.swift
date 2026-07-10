@@ -255,6 +255,40 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(store.burnTier, .fast)
     }
 
+    // MARK: 확장 규약 — 프로바이더 무관 집계 (CLAUDE.md "확장 규약" 강제)
+
+    /// 하드코딩 allow-list 없이 *임의의 미래 프로바이더*(id 가 claude_code/codex/gemini 어느 것도 아님)가
+    /// 범용 집계 경로 전부에 흘러가는지 강제한다. 누군가 오늘/주/월/burn 에 `== "claude_code"` 류
+    /// id 분기를 넣어 특정 프로바이더만 세면 이 테스트가 깨진다.
+    func testUnknownFutureProviderFlowsThroughAllAggregation() async {
+        let future = FakeUsageProvider(
+            id: "future_tool_xyz", displayName: "Future Tool", daily: todayDaily(42_000_000))
+        future.enrichment = ProviderEnrichment(
+            activeBlock: block(tokensPerMinute: 200_000), blocksOK: true,
+            weekTotal: PeriodUsage(period: "w", totalTokens: 90_000_000, totalCost: 0),
+            monthTotal: PeriodUsage(period: "m", totalTokens: 300_000_000, totalCost: 0),
+            periodsOK: true)
+        let store = makeStore(providers: [future])
+        await store.refresh(scheduleEmptyRetry: false)
+
+        XCTAssertEqual(store.todayTotalTokens, 42_000_000, "오늘 합계가 id 로 필터링됨")
+        XCTAssertEqual(store.weekTotalTokens, 90_000_000, "주 합계가 id 로 필터링됨")
+        XCTAssertEqual(store.monthTotalTokens, 300_000_000, "월 합계가 id 로 필터링됨")
+        XCTAssertEqual(store.burnTier, .fast, "burn 이 특정 프로바이더에만 종속됨")
+        // preferring 은 미스 시 .first 폴백이라 id 일치까지 확인해야 유효(theater 방지)
+        XCTAssertEqual(store.snapshot(preferring: "future_tool_xyz")?.providerID, "future_tool_xyz",
+                       "탭에 노출 안 됨")
+    }
+
+    /// 기본 등록 프로바이더 레지스트리 무결성 — 비어 있지 않고 id 가 유일.
+    /// (새 프로바이더를 배열에 등록하는 단일 지점이 살아있는지 최소 보증.)
+    func testDefaultProviderRegistryHasUniqueIds() {
+        let store = UsageStore(autoRefresh: false, defaults: testDefaults)
+        let ids = store.registeredProviderIDs
+        XCTAssertFalse(ids.isEmpty)
+        XCTAssertEqual(Set(ids).count, ids.count, "프로바이더 id 중복")
+    }
+
     // MARK: stale
 
     func testIsStaleBeforeFirstRefreshThenFreshAfter() async {
