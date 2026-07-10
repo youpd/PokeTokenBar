@@ -63,7 +63,7 @@ PokeTokenBar は、今日使ったAIコーディングトークン（Claude Code
 <td width="45%" align="center"><img src="assets/screenshot-collection.png" width="300" alt="図鑑"></td>
 </tr>
 <tr>
-<td width="45%" align="center"><img src="assets/settings.png" width="300" alt="設定"></td>
+<td width="45%" align="center"><img src="assets/settings-ja.png" width="300" alt="設定"></td>
 <td width="55%" valign="middle">
 <h3>設定はお好みで</h3>
 メニューバー表示項目、更新間隔（1–15分／手動）、ログイン時に起動、上限セクションだけを隠す Keychain オフ、警告／危険の閾値つき上限通知、パートナーのイベント通知。<b>韓国語／英語／日本語</b>の UI とポケモン名を完備。
