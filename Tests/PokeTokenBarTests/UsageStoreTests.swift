@@ -232,6 +232,29 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(blazing, .blazing)
     }
 
+    /// Codex 전용 사용자도 burn tier 가 반영되는지 (프로바이더 종속 제거 회귀 방지).
+    func testBurnTierFromNonClaudeProvider() async {
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: todayDaily(10_000_000))
+        codex.enrichment = ProviderEnrichment(activeBlock: block(tokensPerMinute: 200_000), blocksOK: true,
+                                              weekTotal: nil, monthTotal: nil, periodsOK: false)
+        let store = makeStore(providers: [codex])
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertEqual(store.burnTier, .fast)
+    }
+
+    /// 여러 프로바이더의 burn 은 합산된다 (60k + 60k = 120k → fast).
+    func testBurnTierCombinesProviders() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))
+        claude.enrichment = ProviderEnrichment(activeBlock: block(tokensPerMinute: 60_000), blocksOK: true,
+                                               weekTotal: nil, monthTotal: nil, periodsOK: false)
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: todayDaily(10_000_000))
+        codex.enrichment = ProviderEnrichment(activeBlock: block(tokensPerMinute: 60_000), blocksOK: true,
+                                              weekTotal: nil, monthTotal: nil, periodsOK: false)
+        let store = makeStore(providers: [claude, codex])
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertEqual(store.burnTier, .fast)
+    }
+
     // MARK: stale
 
     func testIsStaleBeforeFirstRefreshThenFreshAfter() async {
