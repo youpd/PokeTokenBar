@@ -6,8 +6,11 @@
 "2.1.1 배포", "release", "다음 버전 내줘" — 한 줄 명령을 시키지 말고 아래를 직접 수행한다.
 
 1. **문서 일관성 검토**: `./scripts/release.sh --check-only` 실행. 경고(README/랜딩/cask 의
-   stale 버전·제거된 의존성 등)가 있으면 **먼저 문서를 갱신**한다 — README.md/ko/ja, gh-pages
-   랜딩 `index.html`(3개 언어 i18n 사전 정합 유지), homebrew-tap cask caveat. (`RELEASE.md` 체크리스트)
+   stale 버전·제거된 의존성, **UI 변경 시 스크린샷 stale** 등)가 있으면 **먼저 문서를 갱신**한다 —
+   README.md/ko/ja, gh-pages 랜딩 `index.html`(3개 언어 i18n 사전 정합 유지), homebrew-tap cask caveat.
+   **UI(`Sources/PokeTokenBar/UI/`)를 바꿨으면 `assets/` 스크린샷을 재생성**한다 — 언어별 이미지
+   (`settings.png`/`-ko`/`-ja` 등) 각 README 참조. 팝오버 라이브 캡처가 막히면(Keychain 프롬프트·
+   NSPopover 창 미노출) 실제 UI 를 HTML 로 렌더해 반영. (`RELEASE.md` 체크리스트)
 2. **버전 결정** (2026-07-03 확정 규칙): 사용자가 말한 **단어가 곧 세그먼트 지정 명령**이다 —
    릴리스에 기능이 포함돼 있어도 변경 내용으로 재해석하지 않는다.
    - "**패치**(해줘)" → x.y.**Z+1** / "**마이너**" → x.**Y+1**.0 / "**메이저**" → **X+1**.0.0
