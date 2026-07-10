@@ -33,7 +33,7 @@ PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex · Gemini
 ## 어떻게 자라나요
 
 1. 🥚 **평소처럼 코딩하세요.** Claude Code·Codex·Gemini CLI 에서 태우는 토큰이 알을 품습니다 — 따로 돌릴 건 없어요.
-2. 🐣 **부화.** [PokéAPI](https://pokeapi.co/)의 **1~5세대 모든 진화 계보(시작점 329종)**에서 공식 capture rate 가중으로 태어납니다 — 흔한 포켓몬은 자주, 전설은 부화 129번에 1번. 부화마다 25종 성격 중 하나가 정해지고 — **64마리 중 1마리는 ✨ 색이 다릅니다**.
+2. 🐣 **부화.** [PokéAPI](https://pokeapi.co/)의 **1~5세대 모든 진화 계보(시작점 329종)**에서 공식 capture rate 가중으로 태어납니다 — 흔한 포켓몬은 자주, 전설은 부화 129번에 1번. 부화마다 25종 성격 중 하나가 정해지고 — **아주 특별한 우연으론 ✨ 이로치가 태어납니다**.
 3. ⚡ **진화.** 계속 코딩하면 실제 진화 트리(1/2/3단, 분기)를 따라 자라고, 단계마다 작은 연출이 반겨줍니다.
 4. 🎓 **졸업 & 수집.** 최종 진화 + 임계 도달 시 **도감**에 보존됩니다 — 희귀할수록 오래 걸리고(헤비 유저 기준 common ≈3일 → legendary ≈24일) — 새 알이 도착합니다.
 
@@ -48,16 +48,16 @@ PokeTokenBar는 오늘 사용한 AI 코딩 토큰(Claude Code · Codex · Gemini
 <td width="45%" align="center"><img src="assets/menubar.gif" width="240" alt="메뉴바"></td>
 </tr>
 <tr>
-<td width="45%" align="center"><img src="assets/shiny-banner.gif" width="340" alt="일반 vs 색이 다른 포켓몬"></td>
+<td width="45%" align="center"><img src="assets/shiny-banner.gif" width="340" alt="일반 vs 이로치"></td>
 <td width="55%" valign="middle">
-<h3>✨ 64마리 중 1마리</h3>
-색이 다른 개체는 메뉴바·홈 카드·진화 라인·도감 어디서나 전용 색으로 표시되고, 진화를 거쳐도 유지됩니다. 전용 알림이 그 순간을 놓치지 않게 해줘요.
+<h3>✨ 아주 드문 우연, 이로치</h3>
+이로치는 메뉴바·홈 카드·진화 라인·도감 어디서나 전용 색으로 표시되고, 진화를 거쳐도 유지됩니다. 전용 알림이 그 순간을 놓치지 않게 해줘요.
 </td>
 </tr>
 <tr>
 <td width="55%" valign="middle">
 <h3>채우고 싶어지는 도감</h3>
-졸업한 포켓몬은 전체 진화 라인·희귀도·성격·획득일과 함께 보존됩니다 — 색이 다른 개체는 ✨ 배지를 답니다. 가장 희귀한 수집이 맨 위에 오도록 정렬돼요.
+졸업한 포켓몬은 전체 진화 라인·희귀도·성격·획득일과 함께 보존됩니다 — 이로치는 ✨ 배지를 답니다. 가장 희귀한 수집이 맨 위에 오도록 정렬돼요.
 </td>
 <td width="45%" align="center"><img src="assets/screenshot-collection.png" width="300" alt="도감"></td>
 </tr>
