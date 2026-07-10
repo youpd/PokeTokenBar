@@ -13,11 +13,45 @@ enum BinaryLocator {
     /// `staticPaths`: 셸 해석 전에 먼저 확인할 알려진 설치 경로.
     static func resolve(_ binary: String, staticPaths: [String]) -> String? {
         lock.lock(); defer { lock.unlock() }
-        if let hit = cache[binary] { return hit }
+        if let hit = cache[binary] {
+            // stale 캐시 방어 — 해석 후 앱 삭제/교체(Codex.app 업데이트 등)로 경로가 사라졌으면 재해석.
+            // (버그 리포트 실측: 존재하지 않는 /Applications/Codex.app/... 를 계속 실행 시도)
+            if let path = hit, !FileManager.default.isExecutableFile(atPath: path) {
+                AppLog.write("\(binary) cached path gone, re-resolving: \(path)")
+            } else {
+                return hit
+            }
+        }
         let result = locate(binary, staticPaths: staticPaths)
         cache[binary] = result
         AppLog.write(result.map { "\(binary) resolved: \($0)" } ?? "\(binary) NOT found on PATH")
         return result
+    }
+
+    /// 자식 프로세스용 PATH 보강 — GUI 앱의 최소 PATH 로는 mise/asdf shim 이 내부에서
+    /// 버전매니저 본체(mise 등)를 못 찾아 exit 1 로 죽는다(버그 리포트 실측).
+    /// 해석된 바이너리의 디렉토리 + 버전매니저/Homebrew 공통 경로를 기존 PATH 앞에 붙인다.
+    static func augmentedEnvironment(binaryPath: String,
+                                     base: [String: String] = ProcessInfo.processInfo.environment) -> [String: String] {
+        let home = NSHomeDirectory()
+        var paths = [
+            URL(fileURLWithPath: binaryPath).deletingLastPathComponent().path,
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "\(home)/.local/bin",
+            "\(home)/.local/share/mise/shims",
+            "\(home)/.asdf/shims",
+            "\(home)/.volta/bin",
+            "\(home)/.bun/bin",
+        ]
+        for entry in (base["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin").split(separator: ":") {
+            paths.append(String(entry))
+        }
+        var seen = Set<String>()
+        let merged = paths.filter { seen.insert($0).inserted }.joined(separator: ":")
+        var env = base
+        env["PATH"] = merged
+        return env
     }
 
     /// 설정 변경/재탐지 시 캐시 무효화.

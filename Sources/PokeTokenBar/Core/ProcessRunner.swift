@@ -30,18 +30,30 @@ enum ProcessRunner {
     ) async throws -> Data {
         let outURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("poketokenbar-\(UUID().uuidString).jsonl")
+        let errURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("poketokenbar-\(UUID().uuidString).stderr")
         FileManager.default.createFile(atPath: outURL.path, contents: nil)
-        defer { try? FileManager.default.removeItem(at: outURL) }
+        FileManager.default.createFile(atPath: errURL.path, contents: nil)
+        defer {
+            try? FileManager.default.removeItem(at: outURL)
+            try? FileManager.default.removeItem(at: errURL)
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: binary)
         process.arguments = arguments
         process.qualityOfService = .userInitiated
+        // GUI 앱의 최소 PATH 로는 mise/asdf shim 이 버전매니저 본체를 못 찾아 exit 1
+        // (버그 리포트 실측) — 버전매니저/Homebrew 경로를 보강해 전달.
+        process.environment = BinaryLocator.augmentedEnvironment(binaryPath: binary)
         let stdoutHandle = try FileHandle(forWritingTo: outURL)
         defer { try? stdoutHandle.close() }
+        // stderr 는 버리지 않고 파일로 받아 실패 시 로그에 tail 을 남긴다(원격 진단용).
+        let stderrHandle = try FileHandle(forWritingTo: errURL)
+        defer { try? stderrHandle.close() }
         let stdinPipe = Pipe()
         process.standardOutput = stdoutHandle
-        process.standardError = FileHandle.nullDevice
+        process.standardError = stderrHandle
         process.standardInput = stdinPipe
         var stdinClosed = false
         func closeStdin() {
@@ -82,12 +94,25 @@ enum ProcessRunner {
                     kill(process.processIdentifier, SIGKILL)
                 }
             }
+            logStderrTail(errURL, binary: binary)
             throw RunnerError.timeout(binary)
         }
         if process.terminationStatus != 0 {
+            logStderrTail(errURL, binary: binary)
             throw RunnerError.nonZeroExit(process.terminationStatus, binary)
         }
+        logStderrTail(errURL, binary: binary)
         throw RunnerError.missingResponse(binary)
+    }
+
+    /// 실패 경로에서 stderr 마지막 300자를 로그로 — "exit 1" 만으로는 원인 규명이 불가능했던
+    /// 버그 리포트 재발 방지. 성공 경로에서는 호출하지 않는다(로그 소음 방지).
+    private static func logStderrTail(_ url: URL, binary: String) {
+        guard let data = try? Data(contentsOf: url), !data.isEmpty,
+              let text = String(data: data, encoding: .utf8) else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        AppLog.write("stderr [\(URL(fileURLWithPath: binary).lastPathComponent)]: \(String(trimmed.suffix(300)))")
     }
 
     private static func jsonRPCResultData(in raw: Data, responseID: Int) throws -> Data? {
