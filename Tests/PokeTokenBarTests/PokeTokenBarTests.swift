@@ -289,6 +289,35 @@ final class ModelDecodingTests: XCTestCase {
     }
 }
 
+final class LimitsBackoffTests: XCTestCase {
+    func testNextBackoffDoublesAndCaps() {
+        XCTAssertEqual(UsageStore.nextLimitsBackoff(after: 0), 300)      // 첫 429 → 5분
+        XCTAssertEqual(UsageStore.nextLimitsBackoff(after: 300), 600)
+        XCTAssertEqual(UsageStore.nextLimitsBackoff(after: 1800), 3600)
+        XCTAssertEqual(UsageStore.nextLimitsBackoff(after: 3600), 3600)  // 60분 캡
+    }
+
+    func testRetryAfterHeaderParsing() throws {
+        func response(_ headers: [String: String]?) -> HTTPURLResponse {
+            HTTPURLResponse(url: URL(string: "https://api.anthropic.com/api/oauth/usage")!,
+                            statusCode: 429, httpVersion: nil, headerFields: headers)!
+        }
+        XCTAssertEqual(OAuthLimitsProvider.retryAfterSeconds(response(["Retry-After": "120"])), 120)
+        XCTAssertEqual(OAuthLimitsProvider.retryAfterSeconds(response(["Retry-After": " 60 "])), 60)
+        XCTAssertEqual(OAuthLimitsProvider.retryAfterSeconds(response(["Retry-After": "999999"])), 3600)  // 캡
+        XCTAssertNil(OAuthLimitsProvider.retryAfterSeconds(response(["Retry-After": "0"])))
+        XCTAssertNil(OAuthLimitsProvider.retryAfterSeconds(response(["Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"])))  // date 형식은 미지원 → 기본 백오프
+        XCTAssertNil(OAuthLimitsProvider.retryAfterSeconds(response(nil)))
+    }
+
+    @MainActor
+    func testFriendlyErrorForRateLimited() {
+        let msg = UsageStore.friendlyLimitError(LimitsError.rateLimited(retryAfter: 60), L(.ko))
+        XCTAssertTrue(msg.contains("429"))
+        XCTAssertFalse(msg.contains("httpStatus"))   // raw 에러 노출 금지
+    }
+}
+
 final class SupportMailTests: XCTestCase {
     func testMailtoURLEncodesSubjectAndBody() throws {
         let url = try XCTUnwrap(SupportMail.mailtoURL(
