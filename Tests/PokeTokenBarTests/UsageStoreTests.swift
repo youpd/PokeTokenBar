@@ -256,9 +256,9 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(store.burnTier, .fast)
     }
 
-    /// 자정 직후 — 오늘 토큰 0이지만 활성 5h 블록·주월 누적이 있으면 캐리어 스냅샷 생성.
+    /// 자정 직후 — 오늘 토큰 0이지만 **활성 5h 블록**이 있으면 캐리어 스냅샷 생성.
     /// (없으면 매일 자정~첫토큰 창에서 burn/forecast/주월이 소실되던 버그 회귀 방지)
-    func testMidnightCarrierSnapshotFromEnrichmentOnly() async {
+    func testMidnightCarrierSnapshotFromActiveBlock() async {
         let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: nil)
         claude.enrichment = ProviderEnrichment(
             activeBlock: block(tokensPerMinute: 200_000), blocksOK: true,
@@ -273,6 +273,21 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertNil(snap?.today, "오늘 데이터는 없어야(today=nil)")
         XCTAssertEqual(store.weekTotalTokens, 90_000_000)
         XCTAssertEqual(store.burnTier, .fast, "자정 직후에도 활성 블록으로 burn 반영(idle 아님)")
+    }
+
+    /// 오늘·최근 미사용(활성 블록 없음)인데 주/월 기록만 있으면 캐리어를 만들지 않는다 —
+    /// weekTotal 이 항상 non-nil 이라 탭이 뜨던 회귀 방지("안 썼는데 왜 뜨지").
+    func testNoCarrierForWeekMonthOnlyWithoutActiveBlock() async {
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: nil)
+        codex.enrichment = ProviderEnrichment(
+            activeBlock: nil, blocksOK: true,   // 최근 5h 사용 없음 → 블록 없음
+            weekTotal: PeriodUsage(period: "w", totalTokens: 50_000_000, totalCost: 0),
+            monthTotal: PeriodUsage(period: "m", totalTokens: 80_000_000, totalCost: 0),
+            periodsOK: true)
+        let store = makeStore(providers: [codex])
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertFalse(store.snapshots.contains { $0.providerID == "codex" },
+                       "오늘·최근 미사용 프로바이더는 탭이 뜨면 안 됨")
     }
 
     /// 여러 프로바이더의 burn 은 합산된다 (60k + 60k = 120k → fast).
