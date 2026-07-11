@@ -256,6 +256,25 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(store.burnTier, .fast)
     }
 
+    /// 자정 직후 — 오늘 토큰 0이지만 활성 5h 블록·주월 누적이 있으면 캐리어 스냅샷 생성.
+    /// (없으면 매일 자정~첫토큰 창에서 burn/forecast/주월이 소실되던 버그 회귀 방지)
+    func testMidnightCarrierSnapshotFromEnrichmentOnly() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: nil)
+        claude.enrichment = ProviderEnrichment(
+            activeBlock: block(tokensPerMinute: 200_000), blocksOK: true,
+            weekTotal: PeriodUsage(period: "w", totalTokens: 90_000_000, totalCost: 0),
+            monthTotal: PeriodUsage(period: "m", totalTokens: 300_000_000, totalCost: 0),
+            periodsOK: true)
+        let store = makeStore(providers: [claude])
+        await store.refresh(scheduleEmptyRetry: false)
+
+        let snap = store.snapshot(preferring: "claude_code")
+        XCTAssertEqual(snap?.providerID, "claude_code", "캐리어 스냅샷 미생성")
+        XCTAssertNil(snap?.today, "오늘 데이터는 없어야(today=nil)")
+        XCTAssertEqual(store.weekTotalTokens, 90_000_000)
+        XCTAssertEqual(store.burnTier, .fast, "자정 직후에도 활성 블록으로 burn 반영(idle 아님)")
+    }
+
     /// 여러 프로바이더의 burn 은 합산된다 (60k + 60k = 120k → fast).
     func testBurnTierCombinesProviders() async {
         let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))

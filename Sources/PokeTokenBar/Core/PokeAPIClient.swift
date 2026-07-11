@@ -85,7 +85,7 @@ actor PokeAPIClient: PokeProviding {
             let entries = try await fetchBaseIndex()
             baseIndexCache = entries
             if let data = try? JSONEncoder().encode(BaseIndexSnapshot(fetchedAt: Date(), entries: entries)) {
-                try? data.write(to: Self.baseIndexFile)
+                try? data.write(to: Self.baseIndexFile, options: .atomic)
             }
             return entries
         } catch {
@@ -136,7 +136,7 @@ actor PokeAPIClient: PokeProviding {
         bases.sort { $0.id < $1.id }
         baseIndexCache = bases
         if let data = try? JSONEncoder().encode(BaseIndexSnapshot(fetchedAt: Date(), entries: bases)) {
-            try? data.write(to: Self.baseIndexFile)
+            try? data.write(to: Self.baseIndexFile, options: .atomic)
         }
         AppLog.write("base index: REST build done — \(bases.count) bases persisted (offline-capable now)")
     }

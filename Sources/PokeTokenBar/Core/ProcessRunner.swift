@@ -73,7 +73,10 @@ enum ProcessRunner {
         }
 
         let payload = inputLines.joined(separator: "\n") + "\n"
-        stdinPipe.fileHandleForWriting.write(Data(payload.utf8))
+        // 자식이 stdin 을 읽기 전에 조기 종료하면 broken pipe. non-throwing write 는 SIGPIPE 로
+        // 앱 전체를 죽인다 → throwing API + try? 로 EPIPE 를 삼킨다(앱 기동 시 SIG_IGN 도 설치).
+        // write 가 실패해도 아래 폴링이 종료/타임아웃으로 처리하므로 무해.
+        try? stdinPipe.fileHandleForWriting.write(contentsOf: Data(payload.utf8))
 
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {
@@ -85,6 +88,13 @@ enum ProcessRunner {
                 break
             }
             try await Task.sleep(nanoseconds: 200_000_000)
+        }
+
+        // 프로세스 종료 직전 flush 분이 마지막 in-loop read 보다 늦게 도착할 수 있어
+        // 최종 1회 재read (정상 종료 시 유효 응답이 파일에 있는데 놓치던 레이스 방지).
+        if let response = try Self.jsonRPCResultData(
+            in: (try? Data(contentsOf: outURL)) ?? Data(), responseID: responseID) {
+            return response
         }
 
         if process.isRunning {

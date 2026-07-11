@@ -396,7 +396,22 @@ final class UsageStore {
                 group.addTask { (provider.id, await provider.fetchEnrichment()) }
             }
             for await (id, enrichment) in group {
-                guard let index = snapshots.firstIndex(where: { $0.providerID == id }) else { continue }
+                guard let index = snapshots.firstIndex(where: { $0.providerID == id }) else {
+                    // phase1 이 스냅샷을 안 만든 프로바이더(오늘 토큰 0)라도, 활성 5h 블록·주/월 누적이
+                    // 있으면 캐리어 스냅샷을 생성(today=nil). 없으면 자정~첫토큰 창에서 burn/forecast/
+                    // 주월이 매일 소실된다(어제 늦은밤 코딩이 5h 윈도우에 남은 경우).
+                    let hasEnrichment = (enrichment.blocksOK && enrichment.activeBlock != nil)
+                        || (enrichment.periodsOK && (enrichment.weekTotal != nil || enrichment.monthTotal != nil))
+                    if hasEnrichment, let provider = providers.first(where: { $0.id == id }) {
+                        snapshots.append(ProviderSnapshot(
+                            providerID: id, displayName: provider.displayName, today: nil,
+                            activeBlock: enrichment.blocksOK ? enrichment.activeBlock : nil,
+                            weekTotal: enrichment.periodsOK ? enrichment.weekTotal : nil,
+                            monthTotal: enrichment.periodsOK ? enrichment.monthTotal : nil,
+                            fetchedAt: Date()))
+                    }
+                    continue
+                }
                 if enrichment.blocksOK { snapshots[index].activeBlock = enrichment.activeBlock }
                 if enrichment.periodsOK {
                     snapshots[index].weekTotal = enrichment.weekTotal
@@ -648,7 +663,7 @@ final class UsageStore {
             "lastError": lastErrorDescription ?? "",
         ]
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
-            try? data.write(to: dir.appendingPathComponent("last-snapshot.json"))
+            try? data.write(to: dir.appendingPathComponent("last-snapshot.json"), options: .atomic)
         }
     }
 }
