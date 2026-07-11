@@ -19,6 +19,9 @@ final class UsageStore {
     private(set) var codexLimitsUpdatedAt: Date?
     private(set) var limitsUpdatedAt: Date?
     private(set) var limitsAvailable = true
+    /// Claude 한도 조회가 401/403(세션 만료)로 실패한 상태 — UI 에서 명확한 안내+재시도 노출용.
+    /// 성공 시 해제. 자동 폴링은 무프롬프트라 만료 토큰을 스스로 못 고치므로 사용자 액션 유도가 필요.
+    private(set) var limitsAuthExpired = false
     private(set) var lastUpdated: Date?
     private(set) var isRefreshing = false
     private(set) var isRefreshingLimitToken = false
@@ -406,6 +409,7 @@ final class UsageStore {
         if disableKeychainAccess {
             limits = nil
             limitsAvailable = false
+            limitsAuthExpired = false   // 조회 자체를 안 하므로 "세션 만료" 안내는 무의미 → 해제
             AppLog.write("claude limits skipped: keychain access disabled")
         } else if let until = claudeLimitsBackoffUntil, Date() < until {
             // 429 백오프 중 — 폴링을 쉬어 rate limit 악화 방지 (버그 리포트 실측: 매분 429 재시도)
@@ -415,11 +419,13 @@ final class UsageStore {
                 limits = try await limitsProvider.fetch(allowKeychainPrompt: false)
                 limitsAvailable = true
                 limitsUpdatedAt = Date()
+                limitsAuthExpired = false
                 resetLimitsBackoff()
                 AppLog.write("limits refreshed fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
             } catch {
                 // 비공식 endpoint 실패 → 섹션 숨김, 토큰 표시는 무영향
                 if limits == nil { limitsAvailable = false }
+                updateAuthExpired(from: error)
                 applyLimitsBackoffIfRateLimited(error)
                 AppLog.write("limits unavailable: \(error)")
             }
@@ -457,6 +463,7 @@ final class UsageStore {
             limits = try await limitsProvider.fetch(allowKeychainPrompt: true)
             limitsAvailable = true
             limitsUpdatedAt = Date()
+            limitsAuthExpired = false
             limitTokenRefreshError = nil
             resetLimitsBackoff()
             AppLog.write("limits refreshed by user action fiveHour=\(limits?.fiveHour?.utilization?.description ?? "nil") sevenDay=\(limits?.sevenDay?.utilization?.description ?? "nil")")
@@ -464,8 +471,17 @@ final class UsageStore {
         } catch {
             limitTokenRefreshError = Self.friendlyLimitError(error, L(localizationLanguage))
             if limits == nil { limitsAvailable = false }
+            updateAuthExpired(from: error)
             applyLimitsBackoffIfRateLimited(error)
             AppLog.write("limits user refresh failed: \(error)")
+        }
+    }
+
+    /// 401/403(세션 만료)면 auth-expired 플래그를 세운다. 다른 오류(네트워크·키체인 잠금 등)는
+    /// 만료가 아니므로 건드리지 않는다 — 오탐으로 "세션 만료" 안내를 띄우지 않기 위함.
+    private func updateAuthExpired(from error: any Error) {
+        if case LimitsError.httpStatus(let status) = error, status == 401 || status == 403 {
+            limitsAuthExpired = true
         }
     }
 

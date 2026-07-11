@@ -248,6 +248,19 @@ struct L {
           "Claude の上限取得が一時的に制限されています (429)。少し待って自動的に再試行します。")
     }
 
+    // MARK: Claude 세션 만료(401) 안내
+    var claudeAuthExpiredTitle: String {
+        t("Claude 세션 만료 — 한도가 갱신 안 돼요",
+          "Claude session expired — limits can't refresh",
+          "Claude セッション期限切れ — 上限を更新できません")
+    }
+    var claudeAuthExpiredHint: String {
+        t("표시된 값은 만료 전 기준이에요. 다시 시도하거나, Claude Code 를 한 번 실행하면 자동 갱신됩니다.",
+          "Values shown are from before expiry. Retry, or run Claude Code once to refresh automatically.",
+          "表示値は期限切れ前のものです。再試行するか、Claude Code を一度実行すると自動更新されます。")
+    }
+    var retry: String { t("다시 시도", "Retry", "再試行") }
+
     // MARK: 업데이트 알림
     func updateAvailable(_ version: String, current: String) -> String {
         t("🆕 v\(version) 사용 가능 (현재 \(current))",
