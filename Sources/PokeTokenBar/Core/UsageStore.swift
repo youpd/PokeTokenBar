@@ -397,15 +397,16 @@ final class UsageStore {
             }
             for await (id, enrichment) in group {
                 guard let index = snapshots.firstIndex(where: { $0.providerID == id }) else {
-                    // phase1 이 스냅샷을 안 만든 프로바이더(오늘 토큰 0)라도, 활성 5h 블록·주/월 누적이
-                    // 있으면 캐리어 스냅샷을 생성(today=nil). 없으면 자정~첫토큰 창에서 burn/forecast/
-                    // 주월이 매일 소실된다(어제 늦은밤 코딩이 5h 윈도우에 남은 경우).
-                    let hasEnrichment = (enrichment.blocksOK && enrichment.activeBlock != nil)
-                        || (enrichment.periodsOK && (enrichment.weekTotal != nil || enrichment.monthTotal != nil))
-                    if hasEnrichment, let provider = providers.first(where: { $0.id == id }) {
+                    // 캐리어 스냅샷은 "**실제 활성 5h 블록**이 있을 때만" 만든다(어제 늦은밤 코딩이 5h
+                    // 윈도우에 남아 자정 후 오늘 토큰 0인 경우 — burn/forecast/companion 보존). 주/월
+                    // 누적만으로 만들면, weekTotal 이 옵셔널이 아니라(토큰 0이어도 non-nil) 오늘·최근
+                    // 미사용 프로바이더까지 탭이 떠서 "안 썼는데 왜 뜨지" 회귀가 난다. 블록이 있을 때만
+                    // 그 시점의 주/월도 함께 보존한다.
+                    let hasActiveBlock = enrichment.blocksOK && enrichment.activeBlock != nil
+                    if hasActiveBlock, let provider = providers.first(where: { $0.id == id }) {
                         snapshots.append(ProviderSnapshot(
                             providerID: id, displayName: provider.displayName, today: nil,
-                            activeBlock: enrichment.blocksOK ? enrichment.activeBlock : nil,
+                            activeBlock: enrichment.activeBlock,
                             weekTotal: enrichment.periodsOK ? enrichment.weekTotal : nil,
                             monthTotal: enrichment.periodsOK ? enrichment.monthTotal : nil,
                             fetchedAt: Date()))
