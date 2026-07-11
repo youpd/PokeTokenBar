@@ -15,6 +15,12 @@ enum SupportMail {
             URLQueryItem(name: "subject", value: subject),
             URLQueryItem(name: "body", value: body),
         ]
-        return components.url
+        // URLComponents 는 query 의 '+' 를 percent-encode 하지 않아, 다수 메일 클라이언트가 공백으로
+        // 디코드한다(제목/본문의 'C++'·경로 등 왜곡). query 부분의 '+' 만 %2B 로 치환.
+        guard let raw = components.url?.absoluteString else { return nil }
+        guard let q = raw.firstIndex(of: "?") else { return URL(string: raw) }
+        let head = raw[...q]
+        let query = raw[raw.index(after: q)...].replacingOccurrences(of: "+", with: "%2B")
+        return URL(string: head + query)
     }
 }

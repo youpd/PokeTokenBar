@@ -185,6 +185,9 @@ final class CompanionStore {
                 let newName = line.localizedName(next.speciesID, state.language)
                 justEvolvedTo = newName
                 fireCelebration(.evolve)
+                // 짧은 levelUp 창 — 진화 순간 "…(으)로 진화했어요" 문구 노출(hatch/graduate 와 동일 패턴).
+                // 이게 없으면 computeState 가 .levelUp 을 안 내 statusEvolved 가 도달 불가(dead code)였다.
+                eventUntil = clock().addingTimeInterval(4)
                 notifyCompanionEvent(l.notifEvolveTitle, l.notifEvolveBody(newName))
             }
         }
@@ -238,8 +241,12 @@ final class CompanionStore {
         // 프리패치가 "종 롤 중"(pending 미확정)일 때만 대기 — 이중 rng 소비 방지.
         // pending 확정 후의 예열(라인/스프라이트)과는 동시 진행해도 안전하다.
         guard state.pendingHatchID != nil || !prefetchInFlight else { return }
-        // 샘플링(네트워크) 동안 중복 진입 차단 — hatch() 자체 가드와 별개.
+        // isHatching 을 롤~부화 전체에 defer 로 잠근다. 과거엔 chooseBase 후 isHatching 을 잠깐
+        // 내렸다가(hatch 자체 가드 통과용) hatch 를 호출해, 그 await 창에서 다른 update 틱이
+        // 두 번째 종을 롤하는 경합이 있었다. hatchCore 는 isHatching 을 재검사하지 않으므로
+        // 여기서 소유한 락 하나로 롤·부화가 원자적으로 보호된다.
         isHatching = true
+        defer { isHatching = false }
         // 프리패칭된 종이 있으면 그대로 사용(라인·스프라이트 예열됨 → 딜레이 ~0), 없으면 지금 롤.
         let base: Int?
         if let pending = state.pendingHatchID {
@@ -247,10 +254,9 @@ final class CompanionStore {
         } else {
             base = await chooseBase()
         }
-        isHatching = false
         guard let base else { return }   // 네트워크 불안정 → 알 유지, 다음 update 틱에 재시도
         state.pendingHatchID = nil
-        await hatch(baseID: base)
+        await hatchCore(baseID: base)
     }
 
     // MARK: 알 프리패칭
@@ -288,6 +294,11 @@ final class CompanionStore {
         guard !isHatching else { return }
         isHatching = true
         defer { isHatching = false }
+        await hatchCore(baseID: baseID)
+    }
+
+    /// 실제 부화 로직 — isHatching 락은 호출자(hatch / hatchIfNeeded)가 소유·해제한다.
+    private func hatchCore(baseID: Int) async {
         guard let line = try? await provider.line(baseSpeciesID: baseID) else {
             AppLog.write("hatch: line fetch failed for base \(baseID) — egg kept, retry next tick")
             return
@@ -391,6 +402,6 @@ final class CompanionStore {
     }
     private func save() {
         guard let data = try? JSONEncoder().encode(state) else { return }
-        try? data.write(to: fileURL)
+        try? data.write(to: fileURL, options: .atomic)   // 부분 쓰기 손상 방지(펫 상태)
     }
 }

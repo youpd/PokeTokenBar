@@ -277,7 +277,9 @@ struct PopoverView: View {
                let codexStatus = store.codexLimits, codexStatus.hasVisibleLimit {
                 let buckets = codexStatus.visibleSnapshots
                 codexMetaRow(codexStatus)
-                ForEach(buckets, id: \.limitId) { bucket in
+                // id 는 offset — limitId 가 nil 인 bucket 이 2개 이상이면 \.limitId 는 충돌(행 누락)한다.
+                // snapshots 순서는 결정적(sorted)이라 offset 안정. (scopedLimitEntries 와 동일 방식)
+                ForEach(Array(buckets.enumerated()), id: \.offset) { _, bucket in
                     // bucket 이 여럿일 때만 구분 라벨 (단일 bucket 사용자는 기존 UI 그대로)
                     if buckets.count > 1 {
                         Text(bucket.bucketDisplayName)

@@ -7,23 +7,27 @@ import Foundation
 /// 바이너리별로 1회 캐시(셸 호출 비용 회피).
 enum BinaryLocator {
     private static let lock = NSLock()
-    private nonisolated(unsafe) static var cache: [String: String?] = [:]
+    private struct Cached { let path: String?; let at: Date }
+    private nonisolated(unsafe) static var cache: [String: Cached] = [:]
+    /// 미탐지(nil) 캐시 재해석 주기 — 상주 앱이 실행 중 codex 설치 시 반영. 성공 캐시는 영구(경로 소멸 시만 재해석).
+    private static let notFoundTTL: TimeInterval = 600
 
     /// `binary` 의 절대경로(없으면 nil). 스레드 세이프, 1회 해석 후 캐시.
     /// `staticPaths`: 셸 해석 전에 먼저 확인할 알려진 설치 경로.
     static func resolve(_ binary: String, staticPaths: [String]) -> String? {
         lock.lock(); defer { lock.unlock() }
         if let hit = cache[binary] {
-            // stale 캐시 방어 — 해석 후 앱 삭제/교체(Codex.app 업데이트 등)로 경로가 사라졌으면 재해석.
-            // (버그 리포트 실측: 존재하지 않는 /Applications/Codex.app/... 를 계속 실행 시도)
-            if let path = hit, !FileManager.default.isExecutableFile(atPath: path) {
+            if let path = hit.path {
+                // stale 방어 — 해석 후 앱 삭제/교체(Codex.app 업데이트 등)로 경로 소멸 시 재해석.
+                if FileManager.default.isExecutableFile(atPath: path) { return path }
                 AppLog.write("\(binary) cached path gone, re-resolving: \(path)")
-            } else {
-                return hit
+            } else if Date().timeIntervalSince(hit.at) < notFoundTTL {
+                return nil   // 최근 미탐지 — TTL 내엔 셸 resolve 비용 회피
             }
+            // else: 미탐지 캐시가 TTL 지남 → 재해석(그새 설치됐을 수 있음)
         }
         let result = locate(binary, staticPaths: staticPaths)
-        cache[binary] = result
+        cache[binary] = Cached(path: result, at: Date())
         AppLog.write(result.map { "\(binary) resolved: \($0)" } ?? "\(binary) NOT found on PATH")
         return result
     }

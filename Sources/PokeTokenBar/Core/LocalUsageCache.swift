@@ -151,7 +151,7 @@ actor LocalUsageCache {
         if let data = try? JSONEncoder().encode(snap) {
             // JSON 은 zlib 로 크게 압축됨(수 MB → 수백 KB). 실패 시 평문 저장(로드가 양쪽 다 처리).
             let out = (try? (data as NSData).compressed(using: .zlib) as Data) ?? data
-            try? out.write(to: fileURL)
+            try? out.write(to: fileURL, options: .atomic)
             dirty = false
             lastSave = now()
         }
