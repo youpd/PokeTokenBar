@@ -36,6 +36,20 @@ private struct FakeClaudeLimits: ClaudeLimitsProviding {
     }
 }
 
+/// 호출마다 다른 결과 — 첫 N회는 지정 오류, 이후 성공(또는 실패) 반환. auth-expired 회복 테스트용.
+private final class SequenceClaudeLimits: ClaudeLimitsProviding, @unchecked Sendable {
+    nonisolated(unsafe) var errors: [any Error]
+    nonisolated(unsafe) var success: LimitStatus?
+    nonisolated(unsafe) var call = 0
+    init(errors: [any Error], success: LimitStatus? = nil) { self.errors = errors; self.success = success }
+    func fetch(allowKeychainPrompt: Bool) async throws -> LimitStatus {
+        defer { call += 1 }
+        if call < errors.count { throw errors[call] }
+        if let success { return success }
+        throw LimitsError.keychainInteractionNotAllowed
+    }
+}
+
 private struct FakeCodexLimits: CodexLimitsProviding {
     var status: CodexRateLimitStatus?
     func fetch() async throws -> CodexRateLimitStatus? { status }
@@ -290,6 +304,31 @@ final class UsageStoreTests: XCTestCase {
     }
 
     // MARK: stale
+
+    // MARK: 세션 만료(401) UX
+
+    func testLimitsAuthExpiredSetOn401AndClearedOnSuccess() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))
+        let seq = SequenceClaudeLimits(errors: [LimitsError.httpStatus(401)],
+                                       success: claudeLimits(fiveHourUtil: 12, resetsAt: "2099-01-01T00:00:00Z"))
+        let store = UsageStore(providers: [claude], claudeLimitsProvider: seq,
+                               codexLimitsProvider: FakeCodexLimits(status: nil),
+                               autoRefresh: false, defaults: testDefaults)
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertTrue(store.limitsAuthExpired, "401 → 세션 만료 안내 상태")
+        await store.refresh(scheduleEmptyRetry: false)   // 이번엔 성공
+        XCTAssertFalse(store.limitsAuthExpired, "성공 시 해제")
+    }
+
+    func testLimitsAuthExpiredNotSetOnNon401() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))
+        let store = UsageStore(providers: [claude],
+                               claudeLimitsProvider: SequenceClaudeLimits(errors: [LimitsError.httpStatus(500)]),
+                               codexLimitsProvider: FakeCodexLimits(status: nil),
+                               autoRefresh: false, defaults: testDefaults)
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertFalse(store.limitsAuthExpired, "500 은 세션 만료 아님 — 오탐 방지")
+    }
 
     func testIsStaleBeforeFirstRefreshThenFreshAfter() async {
         let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))

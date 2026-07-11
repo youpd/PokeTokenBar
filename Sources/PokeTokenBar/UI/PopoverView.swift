@@ -221,7 +221,7 @@ struct PopoverView: View {
     /// 선택된 프로바이더에 표시할 공식 한도가 있는가 (Gemini 는 공식 한도 API 없음 → 섹션 생략).
     private var selectedProviderHasLimits: Bool {
         switch selectedSnapshot?.providerID {
-        case "claude_code": return store.limits != nil
+        case "claude_code": return store.limits != nil || store.limitsAuthExpired
         case "codex": return store.codexLimits?.hasVisibleLimit == true
         default: return false
         }
@@ -233,37 +233,45 @@ struct PopoverView: View {
             Text(l.limitsOfficial)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if selectedSnapshot?.providerID == "claude_code", store.limitsAuthExpired {
+                claudeAuthExpiredNotice
+            }
             if selectedSnapshot?.providerID == "claude_code", let limits = store.limits {
-                if store.claudeLimitsStale {
+                // 세션 만료 안내가 이미 있으면 stale 배지는 생략(중복 신호 방지)
+                if store.claudeLimitsStale, !store.limitsAuthExpired {
                     staleBadge(updatedAt: store.limitsUpdatedAt)
                 }
-                limitRow(name: l.fiveHourSession, window: limits.fiveHour)
-                forecastRow
-                limitRow(name: l.weekly, window: limits.sevenDay)
-                limitRow(name: l.weeklyOpus, window: limits.sevenDayOpus)
-                limitRow(name: l.weeklySonnet, window: limits.sevenDaySonnet)
-                // 신형 limits[] — 모델별 주간(weekly_scoped) 등 레거시 필드 밖 윈도우
-                ForEach(Array(limits.scopedLimitEntries.enumerated()), id: \.offset) { _, entry in
-                    limitRow(
-                        name: l.claudeLimitEntry(kind: entry.kind, model: entry.scope?.model?.displayName),
-                        window: LimitWindow(utilization: entry.percent, resetsAt: entry.resetsAt))
-                }
-                // 전 프로바이더가 블록을 갖게 됨 — "Claude 현재 5h 블록" 행은 명시 조회
-                if let block = store.snapshots.first(where: { $0.providerID == "claude_code" })?.activeBlock,
-                   let end = block.endDate {
-                    HStack {
-                        Text(l.claudeCurrentBlock)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        Text(TokenFormatter.compact(block.totalTokens))
-                            .font(.caption)
-                            .monospacedDigit()
-                        Spacer()
-                        (Text("\(l.reset) ") + Text(end, style: .relative))
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                // 세션 만료 시 표시값은 만료 전 기준 → 흐리게 처리해 "현재 값 아님"을 시각적으로 전달
+                VStack(alignment: .leading, spacing: 8) {
+                    limitRow(name: l.fiveHourSession, window: limits.fiveHour)
+                    forecastRow
+                    limitRow(name: l.weekly, window: limits.sevenDay)
+                    limitRow(name: l.weeklyOpus, window: limits.sevenDayOpus)
+                    limitRow(name: l.weeklySonnet, window: limits.sevenDaySonnet)
+                    // 신형 limits[] — 모델별 주간(weekly_scoped) 등 레거시 필드 밖 윈도우
+                    ForEach(Array(limits.scopedLimitEntries.enumerated()), id: \.offset) { _, entry in
+                        limitRow(
+                            name: l.claudeLimitEntry(kind: entry.kind, model: entry.scope?.model?.displayName),
+                            window: LimitWindow(utilization: entry.percent, resetsAt: entry.resetsAt))
+                    }
+                    // 전 프로바이더가 블록을 갖게 됨 — "Claude 현재 5h 블록" 행은 명시 조회
+                    if let block = store.snapshots.first(where: { $0.providerID == "claude_code" })?.activeBlock,
+                       let end = block.endDate {
+                        HStack {
+                            Text(l.claudeCurrentBlock)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(TokenFormatter.compact(block.totalTokens))
+                                .font(.caption)
+                                .monospacedDigit()
+                            Spacer()
+                            (Text("\(l.reset) ") + Text(end, style: .relative))
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
                     }
                 }
+                .opacity(store.limitsAuthExpired ? 0.5 : 1)
             }
             if selectedSnapshot?.providerID == "codex",
                let codexStatus = store.codexLimits, codexStatus.hasVisibleLimit {
@@ -334,6 +342,36 @@ struct PopoverView: View {
                 }
             }
         }
+    }
+
+    /// Claude 세션 만료(401) 안내 — 자동 폴링은 만료 토큰을 스스로 못 고치므로,
+    /// "왜 어제 값에 멈췄는지 + 원탭 재시도 + Claude Code 실행 시 자동 갱신" 을 눈에 띄게 노출.
+    @ViewBuilder
+    private var claudeAuthExpiredNotice: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text(l.claudeAuthExpiredTitle)
+                    .font(.caption).fontWeight(.semibold)
+                Spacer()
+                Button {
+                    Task { await store.refreshLimitTokenFromKeychain() }
+                } label: {
+                    if store.isRefreshingLimitToken {
+                        ProgressView().controlSize(.small)
+                    } else {
+                        Text(l.retry)
+                    }
+                }
+                .controlSize(.small)
+                .disabled(store.isRefreshingLimitToken)
+            }
+            Text(l.claudeAuthExpiredHint)
+                .font(.caption2).foregroundStyle(.secondary)
+        }
+        .padding(8)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     /// 한도 스냅샷 갱신 지연 배지 — Claude/Codex 공용 (마지막 성공 시각 상대 표시).
