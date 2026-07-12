@@ -109,10 +109,10 @@ final class UsageStore {
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 
-    /// 메뉴바 표시 줄 — 사용량(토큰·비용)을 1줄, 한도를 1줄로 나눠 세로 스택(둘 다 있으면 2줄).
-    /// 한도는 **오늘 실제 사용한 프로바이더만** 노출한다(오늘 미사용 프로바이더가 뜨지 않게 —
-    /// snapshots 의 오늘 토큰>0 으로 게이트). 한도 소스는 프로바이더 고유(Claude=OAuth·Codex=프로세스)라
-    /// providerID 로 명시 분기(확장 규약 §"프로바이더 고유 동작"에 해당).
+    /// 메뉴바 표시 줄 — 사용량(토큰·비용)을 윗줄에 나란히, 한도를 아랫줄로. **최대 2줄**(3줄은
+    /// 가독성 저하로 사용자가 반려). 한도는 **오늘 실제 사용한 프로바이더만** 노출한다(오늘 미사용
+    /// 프로바이더가 뜨지 않게 — snapshots 의 오늘 토큰>0 으로 게이트). 한도 소스는 프로바이더
+    /// 고유(Claude=OAuth·Codex=프로세스)라 providerID 로 명시 분기(확장 규약 §"프로바이더 고유 동작").
     var menuLines: [String] {
         guard lastUpdated != nil else { return ["—"] }
         var usage: [String] = []
@@ -129,8 +129,8 @@ final class UsageStore {
             }
         }
         var lines: [String] = []
-        if !usage.isEmpty { lines.append(usage.joined(separator: " · ")) }
-        if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }
+        if !usage.isEmpty { lines.append(usage.joined(separator: " · ")) }            // 윗줄: 토큰·비용 나란히
+        if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }  // 아랫줄: 한도
         return lines   // 빈 배열이면 아이콘만
     }
 
