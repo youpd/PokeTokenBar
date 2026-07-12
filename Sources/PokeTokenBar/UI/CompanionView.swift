@@ -240,15 +240,18 @@ struct RarityTally: View {
     let label: String
     let count: Int
     let color: Color
+    var isSelected: Bool = false      // 이 희귀도로 필터 활성 → solid 채움
     var body: some View {
         HStack(spacing: 3) {
-            Circle().fill(color).frame(width: 6, height: 6)
+            Circle().fill(isSelected ? .white : color).frame(width: 6, height: 6)
             Text(label).font(.system(size: 9, weight: .medium))
             Text("\(count)").font(.system(size: 9, weight: .bold))
         }
+        .foregroundStyle(isSelected ? .white : .primary)
         .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(color.opacity(0.12))
+        .background(isSelected ? color : color.opacity(0.12))
         .clipShape(Capsule())
+        .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: isSelected ? 0 : 0.5))
         .opacity(count == 0 ? 0.4 : 1)
     }
 }
@@ -256,6 +259,8 @@ struct RarityTally: View {
 /// 도감 요약 헤더 — 총 개수 + 희귀도별 개수 캡슐.
 struct DexSummaryHeader: View {
     let store: CompanionStore
+    let selected: Rarity?                  // nil = 필터 없음(전체)
+    let onSelect: (Rarity) -> Void         // 캡슐 탭 → 토글
     private let order: [Rarity] = [.legendary, .rare, .uncommon, .common]
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -266,7 +271,15 @@ struct DexSummaryHeader: View {
             }
             HStack(spacing: 4) {
                 ForEach(order, id: \.self) { r in
-                    RarityTally(label: store.l.rarityLabel(r), count: store.dexCount(r), color: rarityColor(r))
+                    let count = store.dexCount(r)
+                    Button { onSelect(r) } label: {
+                        RarityTally(
+                            label: store.l.rarityLabel(r), count: count, color: rarityColor(r),
+                            isSelected: selected == r)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(count == 0)          // 0마리 희귀도는 필터 불가
+                    .help(store.l.dexFilterHint)
                 }
             }
         }
@@ -276,6 +289,14 @@ struct DexSummaryHeader: View {
 /// 도감 — 잡은 라인(초기→최종 전부) 목록.
 struct CollectionView: View {
     let store: CompanionStore
+    @State private var selectedRarity: Rarity?
+
+    /// 선택된 희귀도만 노출(없으면 전체). 상단 캡슐 토글로 설정.
+    private var visibleEntries: [DexEntry] {
+        guard let r = selectedRarity else { return store.dexEntriesSorted }
+        return store.dexEntriesSorted.filter { $0.rarity == r }
+    }
+
     var body: some View {
         if store.dexEntries.isEmpty {
             emptyState
@@ -284,8 +305,12 @@ struct CollectionView: View {
             // 크기가 줄어드는 문제가 있어 height 로 고정한다.
             ScrollView {
                 VStack(alignment: .leading, spacing: 8) {
-                    DexSummaryHeader(store: store)
-                    ForEach(store.dexEntriesSorted) { entry in
+                    DexSummaryHeader(store: store, selected: selectedRarity) { r in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            selectedRarity = (selectedRarity == r) ? nil : r
+                        }
+                    }
+                    ForEach(visibleEntries) { entry in
                         VStack(alignment: .leading, spacing: 3) {
                             HStack {
                                 Text(store.l.rarityLabel(entry.rarity).uppercased())

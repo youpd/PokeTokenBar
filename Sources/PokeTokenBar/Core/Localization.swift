@@ -187,6 +187,7 @@ struct L {
     var rarityUncommon: String { t("고급", "Uncommon", "アンコモン") }
     var rarityRare: String { t("희귀", "Rare", "レア") }
     var rarityLegendary: String { t("전설", "Legendary", "伝説") }
+    var dexFilterHint: String { t("탭하면 이 희귀도만 보기 · 다시 탭하면 전체", "Tap to show only this rarity · tap again to clear", "タップでこの希少度のみ表示・再タップで全体") }
     func rarityLabel(_ r: Rarity) -> String {
         switch r {
         case .common:    return rarityCommon
