@@ -79,27 +79,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyState() {
         guard let button = statusItem.button else { return }
         Self.applyMenuText(store.menuLines, to: button)
-        button.appearsDisabled = store.isStale
+        // 최초 로딩 중(데이터 없음)엔 흐리게 하지 않는다 — 한 번이라도 로드된 뒤 오래된(stale)
+        // 경우에만 dim. (기동 직후 '비활성처럼 회색'으로 보이던 것 방지 — stale 은 '오래됨' 표시지
+        // '로딩 중' 표시가 아니므로.)
+        button.appearsDisabled = store.isStale && store.lastUpdated != nil
 
         updateCompanion()
         ensureMenuAnimation()
         syncMenuAnimation()   // 가시성 상태 주기적 재평가(occlusion 이 잘못 멈춰도 자가 복구)
     }
 
-    /// 메뉴바 버튼 텍스트 반영 — 1줄이면 기본 title(13pt), 2줄 이상이면 세로 스택
-    /// (작은 폰트 + 타이트 줄높이)으로 attributedTitle. 색을 지정하지 않아 메뉴바 명암(라이트/다크)·
-    /// 비활성(appearsDisabled) 상태에 자동 적응한다.
+    /// 메뉴바 버튼 텍스트 반영 — 1줄이면 기본 title(13pt), 2줄 이상이면 세로 스택.
+    /// 줄 수에 맞춰 폰트를 자동 축소해 N줄이 메뉴바 높이에 클리핑 없이 들어오게 한다. 색을 지정하지
+    /// 않아 메뉴바 명암(라이트/다크)·비활성(appearsDisabled) 상태에 자동 적응한다.
     private static func applyMenuText(_ lines: [String], to button: NSStatusBarButton) {
         if lines.count >= 2 {
+            // 줄당 높이 = 메뉴바 두께 / (줄 수 × 1.2[폰트 자연 줄높이 배수]). 7~11pt 로 클램프.
+            // (노치맥 메뉴바는 더 두꺼워 큰 폰트, 일반은 작게 → 2줄이든 3줄이든 안 잘리게.)
+            let thickness = NSStatusBar.system.thickness
+            let fontSize = min(11, max(7, (thickness / (CGFloat(lines.count) * 1.2)).rounded(.down)))
             let para = NSMutableParagraphStyle()
             para.alignment = .center
-            // 두 줄이 메뉴바 높이(~22pt)에 들어오게 줄간격만 압축. maximumLineHeight 하드캡은
-            // 글리프를 잘라낼 수 있어 쓰지 않고 lineHeightMultiple 로만 좁힌다.
-            para.lineHeightMultiple = 0.85
+            para.lineHeightMultiple = 0.9
             button.attributedTitle = NSAttributedString(
                 string: lines.joined(separator: "\n"),
                 attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular),
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular),
                     .paragraphStyle: para,
                 ])
         } else {

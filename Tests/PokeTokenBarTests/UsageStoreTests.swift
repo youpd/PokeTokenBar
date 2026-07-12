@@ -203,8 +203,23 @@ final class UsageStoreTests: XCTestCase {
         store.showCostInMenu = false
         store.showLimitInMenu = true
         await store.refresh(scheduleEmptyRetry: false)
-        XCTAssertEqual(store.menuLines.count, 2)              // 사용량 줄 + 한도 줄
+        XCTAssertEqual(store.menuLines.count, 2)              // 토큰 줄 + 한도 줄
         XCTAssertTrue(store.menuLines[1].contains("Claude"))  // 둘째 줄 = 한도
+    }
+
+    /// 토큰·비용·한도 다 켜면 → 토큰·비용은 윗줄에 나란히, 한도는 아랫줄. 최대 2줄(3줄은 가독성 반려).
+    func testMenuLinesTokenCostTogetherLimitBelow() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code",
+                                       daily: todayDaily(1_200_000, cost: 3.45))
+        let store = makeStore(providers: [claude],
+                              claude: claudeLimits(fiveHourUtil: 40, resetsAt: "2099-01-01T00:00:00Z"))
+        store.showTokensInMenu = true
+        store.showCostInMenu = true
+        store.showLimitInMenu = true
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertEqual(store.menuLines.count, 2)               // 사용량(토큰·비용) 윗줄 + 한도 아랫줄
+        XCTAssertTrue(store.menuLines[0].contains(" · "))      // 윗줄에 토큰·비용 나란히
+        XCTAssertTrue(store.menuLines[1].contains("Claude"))   // 아랫줄 = 한도
     }
 
     // MARK: 집계
