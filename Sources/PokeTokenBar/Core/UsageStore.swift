@@ -109,21 +109,33 @@ final class UsageStore {
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 
-    var menuTitle: String {
-        guard lastUpdated != nil else { return "—" }
-        var parts: [String] = []
-        if showTokensInMenu { parts.append(TokenFormatter.compact(todayTotalTokens)) }
-        if showCostInMenu { parts.append(TokenFormatter.costCompact(todayCostTotal)) }
+    /// 메뉴바 표시 줄 — 사용량(토큰·비용)을 1줄, 한도를 1줄로 나눠 세로 스택(둘 다 있으면 2줄).
+    /// 한도는 **오늘 실제 사용한 프로바이더만** 노출한다(오늘 미사용 프로바이더가 뜨지 않게 —
+    /// snapshots 의 오늘 토큰>0 으로 게이트). 한도 소스는 프로바이더 고유(Claude=OAuth·Codex=프로세스)라
+    /// providerID 로 명시 분기(확장 규약 §"프로바이더 고유 동작"에 해당).
+    var menuLines: [String] {
+        guard lastUpdated != nil else { return ["—"] }
+        var usage: [String] = []
+        if showTokensInMenu { usage.append(TokenFormatter.compact(todayTotalTokens)) }
+        if showCostInMenu { usage.append(TokenFormatter.costCompact(todayCostTotal)) }
+        var limitParts: [String] = []
         if showLimitInMenu {
-            if let utilization = limits?.fiveHour?.utilization {
-                parts.append("Claude \(TokenFormatter.percent(utilization))")
+            let usedToday = Set(snapshots.filter { $0.todayTotalTokens > 0 }.map(\.providerID))
+            if usedToday.contains("claude_code"), let utilization = limits?.fiveHour?.utilization {
+                limitParts.append("Claude \(TokenFormatter.percent(utilization))")
             }
-            if let usedPercent = codexLimits?.maxPrimaryUsedPercent {
-                parts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
+            if usedToday.contains("codex"), let usedPercent = codexLimits?.maxPrimaryUsedPercent {
+                limitParts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
             }
         }
-        return parts.joined(separator: " · ")   // 전부 끄면 아이콘만
+        var lines: [String] = []
+        if !usage.isEmpty { lines.append(usage.joined(separator: " · ")) }
+        if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }
+        return lines   // 빈 배열이면 아이콘만
     }
+
+    /// 단일 줄 표현 — 관찰(observeStore)·접근성·1줄 렌더 폴백용. 세로 렌더는 menuLines 사용.
+    var menuTitle: String { menuLines.joined(separator: " · ") }
 
     var todayCostTotal: Double {
         let todayKey = LocalUsageReader.todayKey()

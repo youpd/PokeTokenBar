@@ -47,6 +47,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             button.image = Self.eggImage(up: false)
             button.imagePosition = .imageLeading
             button.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
+            button.cell?.usesSingleLineMode = false   // 사용량/한도를 2줄로 세로 스택 가능하게
             button.action = #selector(togglePopover)
             button.target = self
         }
@@ -77,13 +78,36 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func applyState() {
         guard let button = statusItem.button else { return }
-        let title = store.menuTitle
-        button.title = title.isEmpty ? "" : " " + title
+        Self.applyMenuText(store.menuLines, to: button)
         button.appearsDisabled = store.isStale
 
         updateCompanion()
         ensureMenuAnimation()
         syncMenuAnimation()   // 가시성 상태 주기적 재평가(occlusion 이 잘못 멈춰도 자가 복구)
+    }
+
+    /// 메뉴바 버튼 텍스트 반영 — 1줄이면 기본 title(13pt), 2줄 이상이면 세로 스택
+    /// (작은 폰트 + 타이트 줄높이)으로 attributedTitle. 색을 지정하지 않아 메뉴바 명암(라이트/다크)·
+    /// 비활성(appearsDisabled) 상태에 자동 적응한다.
+    private static func applyMenuText(_ lines: [String], to button: NSStatusBarButton) {
+        if lines.count >= 2 {
+            let para = NSMutableParagraphStyle()
+            para.alignment = .center
+            // 두 줄이 메뉴바 높이(~22pt)에 들어오게 줄간격만 압축. maximumLineHeight 하드캡은
+            // 글리프를 잘라낼 수 있어 쓰지 않고 lineHeightMultiple 로만 좁힌다.
+            para.lineHeightMultiple = 0.85
+            button.attributedTitle = NSAttributedString(
+                string: lines.joined(separator: "\n"),
+                attributes: [
+                    .font: NSFont.monospacedDigitSystemFont(ofSize: 9, weight: .regular),
+                    .paragraphStyle: para,
+                ])
+        } else {
+            // 1줄로 되돌릴 때 이전 attributedTitle 이 남지 않게 먼저 비운다.
+            button.attributedTitle = NSAttributedString(string: "")
+            let title = lines.first ?? ""
+            button.title = title.isEmpty ? "" : " " + title
+        }
     }
 
     /// UsageStore 값 → CompanionStore (사용량 적립 + 표시 상태). 매 관찰 변경 시 호출.

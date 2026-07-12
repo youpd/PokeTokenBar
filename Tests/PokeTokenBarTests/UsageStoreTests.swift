@@ -164,6 +164,49 @@ final class UsageStoreTests: XCTestCase {
         XCTAssertEqual(second, [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 82)])
     }
 
+    // MARK: 메뉴바 표시 (menuLines)
+
+    /// 회귀(#사용자리포트): 오늘 안 쓴 프로바이더의 한도가 메뉴바에 떴다.
+    /// 한도는 오늘 usage>0 인 프로바이더만 노출 — Codex 오늘 미사용이면 Codex 한도 숨김.
+    func testMenuBarLimitHidesProviderUnusedToday() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(1_000_000))
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: nil)   // 오늘 미사용
+        let store = makeStore(
+            providers: [claude, codex],
+            claude: claudeLimits(fiveHourUtil: 40, resetsAt: "2099-01-01T00:00:00Z"),
+            codex: codexLimits(primaryUsed: 85))
+        store.showTokensInMenu = false
+        store.showCostInMenu = false
+        store.showLimitInMenu = true
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertFalse(store.menuTitle.contains("Codex"))   // 오늘 미사용 → 숨김
+        XCTAssertTrue(store.menuTitle.contains("Claude"))    // 오늘 사용 → 노출
+    }
+
+    /// 오늘 사용한 프로바이더의 한도는 노출.
+    func testMenuBarLimitShowsProviderUsedToday() async {
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: todayDaily(500_000))
+        let store = makeStore(providers: [codex], codex: codexLimits(primaryUsed: 85))
+        store.showTokensInMenu = false
+        store.showCostInMenu = false
+        store.showLimitInMenu = true
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertTrue(store.menuTitle.contains("Codex"))
+    }
+
+    /// 사용량(토큰)과 한도는 각각 다른 줄로 분리 — 세로 2줄 스택.
+    func testMenuLinesStacksUsageAndLimitsSeparately() async {
+        let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(1_200_000))
+        let store = makeStore(providers: [claude],
+                              claude: claudeLimits(fiveHourUtil: 40, resetsAt: "2099-01-01T00:00:00Z"))
+        store.showTokensInMenu = true
+        store.showCostInMenu = false
+        store.showLimitInMenu = true
+        await store.refresh(scheduleEmptyRetry: false)
+        XCTAssertEqual(store.menuLines.count, 2)              // 사용량 줄 + 한도 줄
+        XCTAssertTrue(store.menuLines[1].contains("Claude"))  // 둘째 줄 = 한도
+    }
+
     // MARK: 집계
 
     func testAggregatesTodayTokensAcrossProviders() async {
@@ -226,8 +269,10 @@ final class UsageStoreTests: XCTestCase {
     }
 
     func testMenuTitleShowsLimitPercents() async {
+        // 둘 다 오늘 사용 → 두 한도 모두 노출. (오늘 usage 게이트: codex 사용 프로바이더도 등록)
         let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code", daily: todayDaily(10_000_000))
-        let store = makeStore(providers: [claude],
+        let codex = FakeUsageProvider(id: "codex", displayName: "Codex", daily: todayDaily(2_000_000))
+        let store = makeStore(providers: [claude, codex],
                               claude: claudeLimits(fiveHourUtil: 42),
                               codex: codexLimits(primaryUsed: 73))
         store.showTokensInMenu = false
