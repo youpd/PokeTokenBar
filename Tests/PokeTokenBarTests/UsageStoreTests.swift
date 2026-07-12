@@ -122,14 +122,14 @@ final class UsageStoreTests: XCTestCase {
     func testLimitAlertFiresOncePerTierNotEveryRefresh() {
         var tiers: [String: Int] = [:]
         func eval(_ util: Double) -> [UsageStore.LimitAlert] {
-            UsageStore.evaluateLimitAlerts(windows: [("주간", util)], warn: 80, crit: 95, tiers: &tiers)
+            UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", util)], warn: 80, crit: 95, tiers: &tiers)
         }
-        XCTAssertEqual(eval(80), [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 80)])
+        XCTAssertEqual(eval(80), [UsageStore.LimitAlert(key: "주간", window: "주간", isCritical: false, utilization: 80)])
         XCTAssertTrue(eval(81).isEmpty)   // 반복 억제 — 사용자 리포트의 핵심
         XCTAssertTrue(eval(84).isEmpty)
         XCTAssertTrue(eval(90).isEmpty)
         XCTAssertTrue(eval(94).isEmpty)
-        XCTAssertEqual(eval(95), [UsageStore.LimitAlert(window: "주간", isCritical: true, utilization: 95)])
+        XCTAssertEqual(eval(95), [UsageStore.LimitAlert(key: "주간", window: "주간", isCritical: true, utilization: 95)])
         XCTAssertTrue(eval(96).isEmpty)   // 위험 tier 유지 → 재알림 없음
         XCTAssertTrue(eval(99).isEmpty)
     }
@@ -138,30 +138,55 @@ final class UsageStoreTests: XCTestCase {
     /// 상황) 평가해도, 판정이 resets_at 를 아예 받지 않으므로 최초 1회만 발화.
     func testLimitAlertDoesNotRefireOnRepeatedSameUtilization() {
         var tiers: [String: Int] = [:]
-        XCTAssertEqual(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).count, 1)
-        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
-        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+        XCTAssertEqual(UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 90)], warn: 80, crit: 95, tiers: &tiers).count, 1)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
     }
 
     /// 경고선 아래로 내려가면(창 리셋 등) 재무장 — 다음 상승 시 새 에피소드로 다시 1회 발화.
     func testLimitAlertRearmsAfterDroppingBelowWarn() {
         var tiers: [String: Int] = [:]
-        _ = UsageStore.evaluateLimitAlerts(windows: [("주간", 82)], warn: 80, crit: 95, tiers: &tiers)
-        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 40)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+        _ = UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 82)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 40)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
         XCTAssertEqual(
-            UsageStore.evaluateLimitAlerts(windows: [("주간", 85)], warn: 80, crit: 95, tiers: &tiers),
-            [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 85)])
+            UsageStore.evaluateLimitAlerts(windows: [("주간", "주간", 85)], warn: 80, crit: 95, tiers: &tiers),
+            [UsageStore.LimitAlert(key: "주간", window: "주간", isCritical: false, utilization: 85)])
     }
 
     /// 여러 창은 독립 추적 — 5h 가 이미 위험 발화해도 주간은 자기 임계값에서 별도 1회.
     func testLimitAlertTracksWindowsIndependently() {
         var tiers: [String: Int] = [:]
         let first = UsageStore.evaluateLimitAlerts(
-            windows: [("5시간", 96), ("주간", 50)], warn: 80, crit: 95, tiers: &tiers)
-        XCTAssertEqual(first, [UsageStore.LimitAlert(window: "5시간", isCritical: true, utilization: 96)])
+            windows: [("5시간", "5시간", 96), ("주간", "주간", 50)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertEqual(first, [UsageStore.LimitAlert(key: "5시간", window: "5시간", isCritical: true, utilization: 96)])
         let second = UsageStore.evaluateLimitAlerts(
-            windows: [("5시간", 97), ("주간", 82)], warn: 80, crit: 95, tiers: &tiers)
-        XCTAssertEqual(second, [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 82)])
+            windows: [("5시간", "5시간", 97), ("주간", "주간", 82)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertEqual(second, [UsageStore.LimitAlert(key: "주간", window: "주간", isCritical: false, utilization: 82)])
+    }
+
+    /// 회귀(#61 계열): 서로 다른 창이 **같은 표시명**을 만들어도 tier 는 `key` 로 독립 추적돼야 한다.
+    /// 과거엔 표시명을 식별자로 써서 Codex 다중 bucket 의 개인 한도(둘 다 "Codex 개인 한도")나
+    /// legacy opus 필드 vs weekly_scoped Opus 엔트리가 서로의 tier 를 덮어써 한쪽 알림이 억제됐다.
+    /// 이제 key 가 다르면 표시명이 같아도 각자 1회씩 발화한다.
+    func testLimitAlertKeyDisambiguatesDuplicateDisplayNames() {
+        var tiers: [String: Int] = [:]
+        // 같은 표시명("Codex 개인 한도"), 다른 key — 두 bucket 이 동시에 경고선을 넘음.
+        let alerts = UsageStore.evaluateLimitAlerts(
+            windows: [("codex.codex.individual", "Codex 개인 한도", 90),
+                      ("codex.codex_other.individual", "Codex 개인 한도", 92)],
+            warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertEqual(alerts.count, 2, "표시명이 같아도 key 가 다르면 각 창이 독립 발화")
+        XCTAssertEqual(Set(alerts.map(\.key)),
+                       ["codex.codex.individual", "codex.codex_other.individual"])
+        XCTAssertTrue(alerts.allSatisfy { $0.window == "Codex 개인 한도" })
+        // 두 창 모두 tier 1 로 기록 — 한쪽이 다른 쪽을 덮어쓰지 않음.
+        XCTAssertEqual(tiers["codex.codex.individual"], 1)
+        XCTAssertEqual(tiers["codex.codex_other.individual"], 1)
+        // 재평가 시 같은 tier → 둘 다 억제(각자 상태 유지).
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(
+            windows: [("codex.codex.individual", "Codex 개인 한도", 91),
+                      ("codex.codex_other.individual", "Codex 개인 한도", 93)],
+            warn: 80, crit: 95, tiers: &tiers).isEmpty)
     }
 
     // MARK: 메뉴바 표시 (menuLines)

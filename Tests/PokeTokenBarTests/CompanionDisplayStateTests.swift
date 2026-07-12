@@ -71,6 +71,30 @@ final class CompanionDisplayStateTests: XCTestCase {
         XCTAssertEqual(s.displayState, .sleep)
     }
 
+    /// 회귀(#4): 진화 문구(justEvolvedTo)는 진화가 연 .levelUp 창 **전체** 동안 유지돼야 한다.
+    /// 과거엔 update() 초입에서 매 틱 무조건 nil 로 밀어, 창 도중 틱이 끼면 표시가
+    /// "…(으)로 진화했어요"→"성장했어요"(statusEvolved→statusGrew)로 되돌아갔다.
+    func testEvolveStatusSurvivesUpdateWithinEventWindow() async {
+        let (s, clock) = await hatchedStore()
+        clock.now = dNow.addingTimeInterval(60)   // 부화 창 만료 — 이후엔 진화 이벤트만 남게
+        // 기준선 설정(첫 update 는 baseline 만 잡고 delta 는 적용 안 함).
+        s.update(todayTokens: 100, todayDate: "d", monthTotal: 0, burnTier: .normal, limitWarning: false, hasUsageData: true)
+        // stage0 임계 도달 → 정확히 1회 진화(1→2). justEvolvedTo 설정 + 이벤트 창 갱신(clock+4).
+        s.applyUsage(PokemonBalance.phaseThreshold(rarity: .common, totalForms: 3, stageIndex: 0))
+        XCTAssertEqual(s.state.active?.stageIndex, 1)
+        let evolvedName = s.justEvolvedTo
+        XCTAssertNotNil(evolvedName, "진화 직후 진화 문구가 설정돼야 함")
+        // 창이 살아있는 동안 추가 update()(delta 0)가 와도 진화 문구·levelUp 이 유지돼야 한다.
+        s.update(todayTokens: 100, todayDate: "d", monthTotal: 0, burnTier: .normal, limitWarning: false, hasUsageData: true)
+        XCTAssertEqual(s.justEvolvedTo, evolvedName, "이벤트 창 도중 진화 문구가 nil 로 밀리면 안 됨(#4)")
+        XCTAssertEqual(s.displayState, .levelUp)
+        // 창 만료 후 update → 진화 문구 정리 + 일반 상태 복귀.
+        clock.now = dNow.addingTimeInterval(70)
+        s.update(todayTokens: 100, todayDate: "d", monthTotal: 0, burnTier: .normal, limitWarning: false, hasUsageData: true)
+        XCTAssertNil(s.justEvolvedTo, "창 만료 시 진화 문구가 정리돼야 함")
+        XCTAssertEqual(s.displayState, .working)
+    }
+
     // MARK: 알(egg) 인큐베이션 파생값
 
     func testEggProgressAndTokensToHatch() {

@@ -207,9 +207,17 @@ final class UsageStore {
         return now.addingTimeInterval(minutesLeft * 60)
     }
 
-    /// 메뉴바 경고 상태 — 임계 초과 또는 리셋 전 한도 도달 예측
+    /// 메뉴바 경고 상태 — 임계 초과 또는 리셋 전 한도 도달 예측.
+    /// Claude 는 5h 만이 아니라 팝오버가 표시하는 모든 한도 창(주간·모델별 주간 포함)의 위험선을
+    /// 검사한다 — 5h 는 여유롭지만 주간이 100% 인 경우에도 경고/‘지침’ 상태가 뜨도록(누락 수정).
     var isLimitWarning: Bool {
-        if let utilization = limits?.fiveHour?.utilization, utilization >= critThreshold { return true }
+        for u in [limits?.fiveHour?.utilization, limits?.sevenDay?.utilization,
+                  limits?.sevenDayOpus?.utilization, limits?.sevenDaySonnet?.utilization] {
+            if let u, u >= critThreshold { return true }
+        }
+        for entry in limits?.scopedLimitEntries ?? [] {
+            if let p = entry.percent, p >= critThreshold { return true }
+        }
         for bucket in codexLimits?.visibleSnapshots ?? [] {
             if let utilization = bucket.primary?.usedPercent,
                Double(utilization) >= critThreshold { return true }
@@ -610,7 +618,8 @@ final class UsageStore {
 
     /// 한도 알림 1건의 발화 지시(순수 판정 결과). 부수효과와 분리해 테스트 가능하게.
     struct LimitAlert: Equatable {
-        let window: String
+        let key: String        // tier 추적·알림 identifier 용 유일 키(창마다 유일, 표시 안 함)
+        let window: String     // 표시용 이름(알림 본문에 노출, 창끼리 중복 가능)
         let isCritical: Bool
         let utilization: Double
     }
@@ -620,22 +629,25 @@ final class UsageStore {
     /// - 경고선 통과 1회 + 위험선 통과 1회만. 같은 tier 유지 중엔 재알림 없음(80·81·84… 억제).
     /// - utilization 이 경고선 아래로 내려가면(창 리셋 등) 재무장.
     /// - resets_at 등 매 fetch 변하는 휘발성 필드를 키에 쓰지 않는다(과거 반복-알림 회귀 원인).
+    /// - 창 식별은 표시명(중복 가능)이 아니라 `key`(창마다 유일)로 한다 — 다른 두 창이 같은 표시명을
+    ///   만들어도(예: Codex 다중 bucket 의 개인 한도, legacy opus 필드 vs weekly_scoped Opus 엔트리)
+    ///   서로의 tier 를 덮어써 억제/중복 발화하던 회귀(#61 계열) 차단.
     static func evaluateLimitAlerts(
-        windows: [(name: String, utilization: Double)],
+        windows: [(key: String, name: String, utilization: Double)],
         warn: Double, crit: Double,
         tiers: inout [String: Int]
     ) -> [LimitAlert] {
         var alerts: [LimitAlert] = []
-        for (name, utilization) in windows {
+        for (key, name, utilization) in windows {
             let tier = utilization >= crit ? 2 : (utilization >= warn ? 1 : 0)
             // 경고선 아래 → 맵에서 제거해 재무장. 0 을 저장하지 않고 제거하므로 맵은 "현재 상승
             // 중(tier≥1)인 창"만 보유 → 자연히 유한. 상한(removeAll) 을 두지 않는다 — 그 정리가
             // 임계 초과 유지 중인 창의 tier 까지 지워 스스로 재알림을 유발하는 역회귀이기 때문.
-            if tier == 0 { tiers[name] = nil; continue }
-            let previous = tiers[name] ?? 0
+            if tier == 0 { tiers[key] = nil; continue }
+            let previous = tiers[key] ?? 0
             guard tier > previous else { continue }       // 같은/낮은 tier → 재알림 안 함
-            tiers[name] = tier
-            alerts.append(LimitAlert(window: name, isCritical: tier == 2, utilization: utilization))
+            tiers[key] = tier
+            alerts.append(LimitAlert(key: key, window: name, isCritical: tier == 2, utilization: utilization))
         }
         return alerts
     }
@@ -644,27 +656,47 @@ final class UsageStore {
         guard limitNotifications else { return }
         guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundlePath.hasSuffix(".app") else { return }
         let l = L(localizationLanguage)
-        var windows: [(name: String, utilization: Double)] = []
+        // (유일 key, 표시 name, utilization). key 는 창 정체성(tier·identifier), name 은 알림 본문.
+        // 팝오버가 한도 행으로 보여주는 모든 창을 알림 대상에 1:1 로 포함한다(표시=알림 일치).
+        var windows: [(key: String, name: String, utilization: Double)] = []
         if let limits {
-            if let utilization = limits.fiveHour?.utilization {
-                windows.append((l.claudeFiveHour, utilization))
+            if let u = limits.fiveHour?.utilization {
+                windows.append(("claude.fiveHour", l.claudeFiveHour, u))
             }
-            if let utilization = limits.sevenDay?.utilization {
-                windows.append((l.claudeWeekly, utilization))
+            if let u = limits.sevenDay?.utilization {
+                windows.append(("claude.sevenDay", l.claudeWeekly, u))
+            }
+            if let u = limits.sevenDayOpus?.utilization {
+                windows.append(("claude.sevenDayOpus", "Claude \(l.weeklyOpus)", u))
+            }
+            if let u = limits.sevenDaySonnet?.utilization {
+                windows.append(("claude.sevenDaySonnet", "Claude \(l.weeklySonnet)", u))
+            }
+            // 모델별 주간(weekly_scoped) 등 — 팝오버는 표시하나 알림엔 빠져 있던 창(누락 수정).
+            // key 에 인덱스를 붙여 동일 kind/model 이 중복돼도 서로 안 덮어쓰게 한다.
+            for (i, entry) in limits.scopedLimitEntries.enumerated() {
+                guard let u = entry.percent else { continue }
+                let model = entry.scope?.model?.displayName
+                windows.append(("claude.scoped.\(entry.kind ?? "?").\(model ?? "?").\(i)",
+                                "Claude \(l.claudeLimitEntry(kind: entry.kind, model: model))", u))
             }
         }
         for bucket in codexLimits?.visibleSnapshots ?? [] {
-            let bucketName = bucket.bucketDisplayName   // "Codex" / "Codex other" 등
+            let bucketKey = bucket.limitId ?? bucket.limitName ?? "codex"   // bucket 유일 식별
+            let bucketName = bucket.bucketDisplayName                       // "Codex" / "Codex other" 등
             if let primary = bucket.primary {
-                windows.append(("\(bucketName) \(l.codexWindow(primary.windowDurationMins))",
+                windows.append(("codex.\(bucketKey).primary",
+                                "\(bucketName) \(l.codexWindow(primary.windowDurationMins))",
                                 Double(primary.usedPercent)))
             }
             if let secondary = bucket.secondary {
-                windows.append(("\(bucketName) \(l.codexWindow(secondary.windowDurationMins))",
+                windows.append(("codex.\(bucketKey).secondary",
+                                "\(bucketName) \(l.codexWindow(secondary.windowDurationMins))",
                                 Double(secondary.usedPercent)))
             }
             if let individual = bucket.individualLimit {
-                windows.append((l.codexPersonalLimit, Double(individual.usedPercent)))
+                windows.append(("codex.\(bucketKey).individual",
+                                l.codexPersonalLimit, Double(individual.usedPercent)))
             }
         }
         for alert in Self.evaluateLimitAlerts(
@@ -676,7 +708,7 @@ final class UsageStore {
             content.sound = alert.isCritical ? .default : nil
             UNUserNotificationCenter.current().add(
                 UNNotificationRequest(
-                    identifier: "\(alert.window)-\(alert.isCritical ? "critical" : "warning")",
+                    identifier: "\(alert.key)-\(alert.isCritical ? "critical" : "warning")",
                     content: content, trigger: nil))
         }
     }

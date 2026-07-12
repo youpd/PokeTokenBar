@@ -119,7 +119,6 @@ final class CompanionStore {
 
     func update(todayTokens: Int, todayDate: String, monthTotal: Int,
                 burnTier: BurnTier, limitWarning: Bool, hasUsageData: Bool) {
-        justEvolvedTo = nil
         if !state.installBaselineSet {
             // 설치 기준선 — 실제 데이터가 도착한 시점의 today 를 baseline 으로(이전 사용량 미카운트).
             // 데이터 도착 전(기동 직후 빈 새로고침)에는 잡지 않는다.
@@ -141,8 +140,12 @@ final class CompanionStore {
                 }
             }
         }
-        // 이벤트 만료
-        if let until = eventUntil, clock() > until { justGraduated = nil; eventUntil = nil }
+        // 이벤트(진화/졸업/부화) 창 만료 — .levelUp 창이 끝날 때 문구 플래그를 함께 정리한다.
+        // justEvolvedTo 는 여기(창 만료)에서만 지운다: 과거엔 매 update() 초입에 무조건 nil 로 밀어,
+        // 진화 후 4초 창 도중 update 틱이 끼면 "…(으)로 진화했어요"→"성장했어요"로 되돌아갔다(회귀 #4).
+        if let until = eventUntil, clock() > until {
+            justGraduated = nil; justEvolvedTo = nil; eventUntil = nil
+        }
         // 알 상태 프리패칭 — 종 pre-roll + 라인/스프라이트 예열(부화 순간 딜레이 제거).
         // 성공할 때까지 매 update 틱마다 재시도(성공 후엔 no-op).
         if state.active == nil, state.installBaselineSet, !isHatching {
@@ -317,6 +320,7 @@ final class CompanionStore {
         let name = line.localizedName(line.baseID, state.language)
         notifyCompanionEvent(isShiny ? l.notifShinyHatchTitle : l.notifHatchTitle,
                              isShiny ? l.notifShinyHatchBody(name) : l.notifHatchBody(name))
+        justEvolvedTo = nil        // 새 부화는 "성장" 문구(진화 아님) — 직전 진화명이 남아 표시되지 않게
         displayState = .levelUp
         eventUntil = clock().addingTimeInterval(4)
         if overflow > 0 { applyUsage(overflow) }   // 이월분 즉시 반영(필요 시 진화까지)

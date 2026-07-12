@@ -35,7 +35,7 @@ actor SpriteStore {
         guard let url = URL(string: urlStr),
               let (d, resp) = try? await URLSession.shared.data(from: url),
               (resp as? HTTPURLResponse)?.statusCode == 200, !d.isEmpty else { return nil }
-        try? d.write(to: file)
+        try? d.write(to: file, options: .atomic)   // torn write 방지 — 크래시/강제종료 시 손상 캐시가 남지 않게
         remember(key, d)
         return d
     }
