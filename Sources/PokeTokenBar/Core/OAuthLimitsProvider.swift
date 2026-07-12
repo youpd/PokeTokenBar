@@ -84,13 +84,8 @@ private actor OAuthAccessTokenCache {
             throw LimitsError.keychainInteractionNotAllowed
         }
 
-        if let credential = try Self.readPokeTokenBarCache() {
-            cachedCredential = credential
-            return credential.accessToken
-        }
         if let credential = try Self.readClaudeCredentialsFile() {
             cachedCredential = credential
-            Self.writePokeTokenBarCache(credential.data)
             return credential.accessToken
         }
         // 무프롬프트(no-UI) Claude Keychain 읽기. 사용자가 과거 한 번 '항상 허용'했다면
@@ -100,7 +95,6 @@ private actor OAuthAccessTokenCache {
         // 갱신한다. 수동 버튼 없이 자동 동작하게 하는 핵심.
         if let credential = Self.readClaudeKeychainSilently() {
             cachedCredential = credential
-            Self.writePokeTokenBarCache(credential.data)
             return credential.accessToken
         }
         // 무프롬프트로 토큰을 못 구함 → 명시적 사용자 동작(설정의 갱신 버튼)일 때만 프롬프트를
@@ -112,7 +106,6 @@ private actor OAuthAccessTokenCache {
 
         let credential = try Self.readClaudeKeychain(allowKeychainPrompt: allowKeychainPrompt)
         cachedCredential = credential
-        Self.writePokeTokenBarCache(credential.data)
         return credential.accessToken
     }
 
@@ -142,88 +135,15 @@ private actor OAuthAccessTokenCache {
     }
 
     func invalidate(removePersistentCache: Bool = false) {
+        // 앱 자체 키체인 캐시는 코드서명이 바뀔 때마다(재빌드·실사용자 매 업그레이드) 항목 ACL 이
+        // 안 맞아 write/삭제 시 접근 허용 프롬프트를 유발했다(no-UI 로도 억제 안 됨) → 제거.
+        // 토큰은 Claude 키체인 무UI 읽기/.credentials.json 로 조용히 재취득한다. 인메모리만 비운다.
         cachedCredential = nil
-        if removePersistentCache {
-            Self.deletePokeTokenBarCache()
-        }
     }
 
-    private nonisolated static func readPokeTokenBarCache() throws -> OAuthCredentialData.Credential? {
-        if KeychainAccessGate.isDisabled {
-            throw LimitsError.keychainAccessDisabled
-        }
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: OAuthCredentialData.tokenMacCacheService,
-            kSecAttrAccount as String: OAuthCredentialData.tokenMacCacheAccount,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        KeychainNoUIQuery.apply(to: &query)
-
-        var item: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &item)
-        switch status {
-        case errSecSuccess:
-            guard let data = item as? Data else { return nil }
-            guard let credential = OAuthCredentialData.credential(from: data), !credential.isExpired else {
-                deletePokeTokenBarCache()
-                return nil
-            }
-            return credential
-        case errSecItemNotFound:
-            return nil
-        case errSecInteractionNotAllowed:
-            throw LimitsError.keychainInteractionNotAllowed
-        default:
-            throw LimitsError.keychainUnavailable(status)
-        }
-    }
-
-    private nonisolated static func writePokeTokenBarCache(_ data: Data) {
-        if KeychainAccessGate.isDisabled { return }
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: OAuthCredentialData.tokenMacCacheService,
-            kSecAttrAccount as String: OAuthCredentialData.tokenMacCacheAccount,
-        ]
-        KeychainNoUIQuery.apply(to: &query)
-
-        let updateStatus = SecItemUpdate(
-            query as CFDictionary,
-            [kSecValueData as String: data] as CFDictionary)
-        if updateStatus == errSecSuccess { return }
-        guard updateStatus == errSecItemNotFound else {
-            AppLog.write("oauth cache update failed: \(updateStatus)")
-            return
-        }
-
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        addQuery[kSecAttrLabel as String] = "PokeTokenBar OAuth Cache"
-        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
-        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
-        if addStatus != errSecSuccess {
-            AppLog.write("oauth cache add failed: \(addStatus)")
-        }
-    }
-
-    private nonisolated static func deletePokeTokenBarCache() {
-        // 잠긴 키체인에서 삭제(SecItemDelete)도 암호 다이얼로그를 유발한다. 401 무효화 경로가
-        // 프롬프트 여부와 무관하게 호출하므로, 잠겨 있으면 디스크 삭제는 생략한다(메모리 캐시는
-        // invalidate 가 이미 비움 — 만료 항목은 다음 unlocked 읽기에서 정리됨).
-        if isDefaultKeychainLocked() { return }
-        var query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: OAuthCredentialData.tokenMacCacheService,
-            kSecAttrAccount as String: OAuthCredentialData.tokenMacCacheAccount,
-        ]
-        KeychainNoUIQuery.apply(to: &query)
-        let status = SecItemDelete(query as CFDictionary)
-        if status != errSecSuccess && status != errSecItemNotFound {
-            AppLog.write("oauth cache delete failed: \(status)")
-        }
-    }
+    // (구) 앱 자체 키체인 OAuth 캐시(read/write/delete)는 제거됨 — 코드서명 변경마다 항목 ACL
+    // 불일치로 접근 허용 프롬프트를 유발했다. 토큰은 인메모리 + Claude 키체인 무UI 읽기 +
+    // .credentials.json 로 충분히 조용히 취득된다.
 
     private nonisolated static func readClaudeCredentialsFile() throws -> OAuthCredentialData.Credential? {
         let url = FileManager.default.homeDirectoryForCurrentUser
@@ -268,8 +188,6 @@ private actor OAuthAccessTokenCache {
 
 enum OAuthCredentialData {
     static let claudeKeychainService = "Claude Code-credentials"
-    static let tokenMacCacheService = "io.github.chattymin.poketokenbar.cache"
-    static let tokenMacCacheAccount = "oauth.claude"
 
     struct Credential {
         let accessToken: String
