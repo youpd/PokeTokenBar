@@ -109,27 +109,40 @@ final class UsageStore {
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 
-    /// 메뉴바 표시 줄 — 켜진 항목을 **각각 세로로** 쌓는다: 토큰 / 비용 / 한도(각 1줄).
-    /// 토큰·비용을 가로로 합치지 않는다(사용자 요청: 토큰 위·비용 아래). 3개 다 켜면 3줄.
-    /// 한도는 **오늘 실제 사용한 프로바이더만** 노출(snapshots 의 오늘 토큰>0 게이트), 한 줄에 나란히.
-    /// 한도 소스는 프로바이더 고유(Claude=OAuth·Codex=프로세스)라 providerID 로 명시 분기(확장 규약).
+    /// 메뉴바 표시 줄 규칙 (사용자 확정 — 조합표 전수 검증: `UsageStoreTests.testMenuLinesAllCombinations`):
+    /// - **활성 항목 2개 이하 → 각 항목을 개별 세로 줄로**(토큰/비용/한도 각 1줄).
+    /// - **3개(토큰+비용+한도) 모두 활성 → 토큰·비용을 한 줄로, 한도를 아랫줄로**(= 총 2줄).
+    /// 한도 줄은 오늘 사용한 프로바이더만(`menuLimitLine`). 빈 배열이면 아이콘만.
     var menuLines: [String] {
         guard lastUpdated != nil else { return ["—"] }
-        var lines: [String] = []
-        if showTokensInMenu { lines.append(TokenFormatter.compact(todayTotalTokens)) }
-        if showCostInMenu { lines.append(TokenFormatter.costCompact(todayCostTotal)) }
-        if showLimitInMenu {
-            let usedToday = Set(snapshots.filter { $0.todayTotalTokens > 0 }.map(\.providerID))
-            var limitParts: [String] = []
-            if usedToday.contains("claude_code"), let utilization = limits?.fiveHour?.utilization {
-                limitParts.append("Claude \(TokenFormatter.percent(utilization))")
-            }
-            if usedToday.contains("codex"), let usedPercent = codexLimits?.maxPrimaryUsedPercent {
-                limitParts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
-            }
-            if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }   // 한도 1줄(프로바이더 나란히)
+        var usage: [String] = []
+        if showTokensInMenu { usage.append(TokenFormatter.compact(todayTotalTokens)) }
+        if showCostInMenu { usage.append(TokenFormatter.costCompact(todayCostTotal)) }
+        let limit = menuLimitLine   // nil = 한도 미표시/미가용
+
+        if limit != nil && usage.count == 2 {
+            // 3개 다 활성 → 토큰·비용 한 줄 + 한도 아랫줄 (≤2줄 유지)
+            return [usage.joined(separator: " · "), limit!]
         }
-        return lines   // 빈 배열이면 아이콘만
+        // 그 외(2개 이하) → 각 항목 개별 세로 줄
+        var lines = usage
+        if let limit { lines.append(limit) }
+        return lines
+    }
+
+    /// 메뉴바 한도 줄 — **오늘 실제 사용한 프로바이더만** 한 줄에 나란히(미사용/미가용이면 nil).
+    /// 한도 소스는 프로바이더 고유(Claude=OAuth·Codex=프로세스)라 providerID 로 명시 분기(확장 규약).
+    private var menuLimitLine: String? {
+        guard showLimitInMenu else { return nil }
+        let usedToday = Set(snapshots.filter { $0.todayTotalTokens > 0 }.map(\.providerID))
+        var parts: [String] = []
+        if usedToday.contains("claude_code"), let utilization = limits?.fiveHour?.utilization {
+            parts.append("Claude \(TokenFormatter.percent(utilization))")
+        }
+        if usedToday.contains("codex"), let usedPercent = codexLimits?.maxPrimaryUsedPercent {
+            parts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
+        }
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
     /// 단일 줄 표현 — 관찰(observeStore)·접근성·1줄 렌더 폴백용. 세로 렌더는 menuLines 사용.
