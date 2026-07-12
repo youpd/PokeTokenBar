@@ -62,11 +62,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyState()
     }
 
-    /// Observation 기반 상태 반영 — store 의 menuTitle/isStale 변경 시 재호출
+    /// Observation 기반 상태 반영 — store 의 menuTitle(=menuLines) 변경 시 재호출.
+    /// (isStale 은 더 이상 추적 안 함 — 메뉴바 dim 제거로 시각 출력에 관여하지 않음.)
     private func observeStore() {
         withObservationTracking {
             _ = store.menuTitle
-            _ = store.isStale
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
@@ -79,10 +79,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func applyState() {
         guard let button = statusItem.button else { return }
         Self.applyMenuText(store.menuLines, to: button)
-        // 최초 로딩 중(데이터 없음)엔 흐리게 하지 않는다 — 한 번이라도 로드된 뒤 오래된(stale)
-        // 경우에만 dim. (기동 직후 '비활성처럼 회색'으로 보이던 것 방지 — stale 은 '오래됨' 표시지
-        // '로딩 중' 표시가 아니므로.)
-        button.appearsDisabled = store.isStale && store.lastUpdated != nil
+        // stale 시각 dim 제거 — 슬립/런치 직후 refresh 완료 전 몇 초간 회색으로 보여 '고장/비활성'
+        // 으로 오인되던 것 방지(사용자 반복 지적). 데이터가 오래됐다는 신호가 필요하면 팝오버
+        // (limitsUpdatedAt 등)에서 제공하고, 메뉴바 아이콘·숫자는 흐리게 하지 않는다.
+        button.appearsDisabled = false
 
         updateCompanion()
         ensureMenuAnimation()

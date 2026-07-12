@@ -223,17 +223,37 @@ final class UsageStoreTests: XCTestCase {
     }
 
     /// 3개 다 켜면 → 각각 세로 3줄(토큰 / 비용 / 한도).
-    func testMenuLinesAllThreeStackPerItem() async {
+    /// 확정 규칙 전수 검증(사용자 요청 "전부 다 테스트"): 8개 토글 조합 각각의 menuLines.
+    /// - 2개 이하 활성 → 각 항목 개별 세로 줄. - 3개 다 활성 → 토큰·비용 한 줄 + 한도 아랫줄(2줄).
+    func testMenuLinesAllCombinations() async {
         let claude = FakeUsageProvider(id: "claude_code", displayName: "Claude Code",
                                        daily: todayDaily(1_200_000, cost: 3.45))
         let store = makeStore(providers: [claude],
                               claude: claudeLimits(fiveHourUtil: 40, resetsAt: "2099-01-01T00:00:00Z"))
-        store.showTokensInMenu = true
-        store.showCostInMenu = true
-        store.showLimitInMenu = true
         await store.refresh(scheduleEmptyRetry: false)
-        XCTAssertEqual(store.menuLines.count, 3)               // 토큰 / 비용 / 한도
-        XCTAssertTrue(store.menuLines[2].contains("Claude"))   // 마지막 줄 = 한도
+        func lines(_ t: Bool, _ c: Bool, _ l: Bool) -> [String] {
+            store.showTokensInMenu = t; store.showCostInMenu = c; store.showLimitInMenu = l
+            return store.menuLines
+        }
+        // 전부 끔 → 아이콘만
+        XCTAssertEqual(lines(false, false, false), [])
+        // 1개만 → 1줄
+        XCTAssertEqual(lines(true, false, false).count, 1)   // 토큰
+        XCTAssertEqual(lines(false, true, false).count, 1)   // 비용
+        XCTAssertEqual(lines(false, false, true).count, 1)   // 한도
+        // 2개 → 무조건 세로(각 항목 개별 줄)
+        let tc = lines(true, true, false)
+        XCTAssertEqual(tc.count, 2)                           // 토큰 / 비용
+        XCTAssertFalse(tc[0].contains(" · "))                // 윗줄=토큰만(합침 없음)
+        XCTAssertTrue(tc[1].contains("$"))                   // 아랫줄=비용
+        XCTAssertEqual(lines(true, false, true).count, 2)    // 토큰 / 한도
+        XCTAssertEqual(lines(false, true, true).count, 2)    // 비용 / 한도
+        // 3개 → 토큰·비용 한 줄 + 한도 아랫줄 (2줄)
+        let three = lines(true, true, true)
+        XCTAssertEqual(three.count, 2)                        // 3줄 아님 — 2줄
+        XCTAssertTrue(three[0].contains(" · "))              // 윗줄=토큰·비용 나란히
+        XCTAssertFalse(three[0].contains("Claude"))          // 윗줄에 한도 없음
+        XCTAssertTrue(three[1].contains("Claude"))           // 아랫줄=한도
     }
 
     // MARK: 집계
