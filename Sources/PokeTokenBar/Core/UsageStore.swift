@@ -92,8 +92,11 @@ final class UsageStore {
     private var timer: Timer?
     private var pollingSuspended = false   // 디스플레이 꺼짐 동안 폴링 정지 (배터리)
     private var emptyUsageRetryTask: Task<Void, Never>?
-    /// 같은 한도 블록(resets_at 기준)에 대해 알림 1회만 발화
-    private var notifiedKeys: Set<String> = []
+    /// 한도 알림 상태(엣지 트리거) — 창 이름 → 이미 알린 최고 tier(0=없음, 1=경고, 2=위험).
+    /// utilization 이 경고선 아래로 내려가면 맵에서 제거해 재무장. resets_at 같은 매 fetch 변하는
+    /// 휘발성 필드를 키에 쓰지 않는다(rolling 주간 창 resets_at 가 매번 달라져 80·81·84…
+    /// 갱신마다 재알림되던 회귀 원인 제거).
+    private var notifiedTier: [String: Int] = [:]
 
     // MARK: 파생값
 
@@ -582,62 +585,77 @@ final class UsageStore {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
+    /// 한도 알림 1건의 발화 지시(순수 판정 결과). 부수효과와 분리해 테스트 가능하게.
+    struct LimitAlert: Equatable {
+        let window: String
+        let isCritical: Bool
+        let utilization: Double
+    }
+
+    /// 알림 판정(순수·엣지 트리거) — 창별 utilization·임계값·직전 tier 상태로부터
+    /// *임계값을 새로 넘어선 순간에만* 발화할 알림을 계산하고 tier 상태를 갱신한다.
+    /// - 경고선 통과 1회 + 위험선 통과 1회만. 같은 tier 유지 중엔 재알림 없음(80·81·84… 억제).
+    /// - utilization 이 경고선 아래로 내려가면(창 리셋 등) 재무장.
+    /// - resets_at 등 매 fetch 변하는 휘발성 필드를 키에 쓰지 않는다(과거 반복-알림 회귀 원인).
+    static func evaluateLimitAlerts(
+        windows: [(name: String, utilization: Double)],
+        warn: Double, crit: Double,
+        tiers: inout [String: Int]
+    ) -> [LimitAlert] {
+        var alerts: [LimitAlert] = []
+        for (name, utilization) in windows {
+            let tier = utilization >= crit ? 2 : (utilization >= warn ? 1 : 0)
+            // 경고선 아래 → 맵에서 제거해 재무장. 0 을 저장하지 않고 제거하므로 맵은 "현재 상승
+            // 중(tier≥1)인 창"만 보유 → 자연히 유한. 상한(removeAll) 을 두지 않는다 — 그 정리가
+            // 임계 초과 유지 중인 창의 tier 까지 지워 스스로 재알림을 유발하는 역회귀이기 때문.
+            if tier == 0 { tiers[name] = nil; continue }
+            let previous = tiers[name] ?? 0
+            guard tier > previous else { continue }       // 같은/낮은 tier → 재알림 안 함
+            tiers[name] = tier
+            alerts.append(LimitAlert(window: name, isCritical: tier == 2, utilization: utilization))
+        }
+        return alerts
+    }
+
     private func checkLimitNotifications() {
         guard limitNotifications else { return }
         guard Bundle.main.bundleIdentifier != nil, Bundle.main.bundlePath.hasSuffix(".app") else { return }
         let l = L(localizationLanguage)
-        var windows: [(name: String, utilization: Double, resetKey: String)] = []
+        var windows: [(name: String, utilization: Double)] = []
         if let limits {
             if let utilization = limits.fiveHour?.utilization {
-                windows.append((
-                    l.claudeFiveHour,
-                    utilization,
-                    limits.fiveHour?.resetsAt ?? "none"))
+                windows.append((l.claudeFiveHour, utilization))
             }
             if let utilization = limits.sevenDay?.utilization {
-                windows.append((
-                    l.claudeWeekly,
-                    utilization,
-                    limits.sevenDay?.resetsAt ?? "none"))
+                windows.append((l.claudeWeekly, utilization))
             }
         }
         for bucket in codexLimits?.visibleSnapshots ?? [] {
             let bucketName = bucket.bucketDisplayName   // "Codex" / "Codex other" 등
             if let primary = bucket.primary {
-                windows.append((
-                    "\(bucketName) \(l.codexWindow(primary.windowDurationMins))",
-                    Double(primary.usedPercent),
-                    primary.resetsAt.map(String.init) ?? "none"))
+                windows.append(("\(bucketName) \(l.codexWindow(primary.windowDurationMins))",
+                                Double(primary.usedPercent)))
             }
             if let secondary = bucket.secondary {
-                windows.append((
-                    "\(bucketName) \(l.codexWindow(secondary.windowDurationMins))",
-                    Double(secondary.usedPercent),
-                    secondary.resetsAt.map(String.init) ?? "none"))
+                windows.append(("\(bucketName) \(l.codexWindow(secondary.windowDurationMins))",
+                                Double(secondary.usedPercent)))
             }
             if let individual = bucket.individualLimit {
-                windows.append((
-                    l.codexPersonalLimit,
-                    Double(individual.usedPercent),
-                    String(individual.resetsAt)))
+                windows.append((l.codexPersonalLimit, Double(individual.usedPercent)))
             }
         }
-        for (name, utilization, resetKey) in windows {
-            for (level, threshold) in [("critical", critThreshold), ("warning", warnThreshold)] {
-                guard utilization >= threshold else { continue }
-                let key = "\(name)-\(resetKey)-\(level)"
-                guard !notifiedKeys.contains(key) else { break }
-                notifiedKeys.insert(key)
-                let content = UNMutableNotificationContent()
-                content.title = level == "critical" ? l.notifCritical : l.notifWarning
-                content.body = l.notifBody(name, TokenFormatter.percent(utilization))
-                content.sound = level == "critical" ? .default : nil
-                UNUserNotificationCenter.current().add(
-                    UNNotificationRequest(identifier: key, content: content, trigger: nil))
-                break // 같은 윈도우에 critical 발화 시 warning 은 생략
-            }
+        for alert in Self.evaluateLimitAlerts(
+            windows: windows, warn: warnThreshold, crit: critThreshold, tiers: &notifiedTier)
+        {
+            let content = UNMutableNotificationContent()
+            content.title = alert.isCritical ? l.notifCritical : l.notifWarning
+            content.body = l.notifBody(alert.window, TokenFormatter.percent(alert.utilization))
+            content.sound = alert.isCritical ? .default : nil
+            UNUserNotificationCenter.current().add(
+                UNNotificationRequest(
+                    identifier: "\(alert.window)-\(alert.isCritical ? "critical" : "warning")",
+                    content: content, trigger: nil))
         }
-        if notifiedKeys.count > 64 { notifiedKeys.removeAll() }
     }
 
     // MARK: parity-check.sh 용 스냅샷 파일

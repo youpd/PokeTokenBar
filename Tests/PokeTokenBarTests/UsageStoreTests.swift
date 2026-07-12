@@ -115,6 +115,55 @@ final class UsageStoreTests: XCTestCase {
                    defaults: testDefaults)
     }
 
+    // MARK: 한도 알림 — 엣지 트리거(임계값 도달 시 최초 1회만)
+
+    /// 회귀(#사용자리포트): 경고선 80% 로 두면 80·81·84·90·94 매 갱신마다 반복 알림되던 문제.
+    /// 이제 같은 tier 유지 중엔 재알림하지 않고, 위험선 통과 시에만 1회 추가 발화.
+    func testLimitAlertFiresOncePerTierNotEveryRefresh() {
+        var tiers: [String: Int] = [:]
+        func eval(_ util: Double) -> [UsageStore.LimitAlert] {
+            UsageStore.evaluateLimitAlerts(windows: [("주간", util)], warn: 80, crit: 95, tiers: &tiers)
+        }
+        XCTAssertEqual(eval(80), [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 80)])
+        XCTAssertTrue(eval(81).isEmpty)   // 반복 억제 — 사용자 리포트의 핵심
+        XCTAssertTrue(eval(84).isEmpty)
+        XCTAssertTrue(eval(90).isEmpty)
+        XCTAssertTrue(eval(94).isEmpty)
+        XCTAssertEqual(eval(95), [UsageStore.LimitAlert(window: "주간", isCritical: true, utilization: 95)])
+        XCTAssertTrue(eval(96).isEmpty)   // 위험 tier 유지 → 재알림 없음
+        XCTAssertTrue(eval(99).isEmpty)
+    }
+
+    /// 휘발성 resets_at 회귀 직접 재현: 같은 utilization 을 여러 번(= 매 fetch resets_at 만 달라지던
+    /// 상황) 평가해도, 판정이 resets_at 를 아예 받지 않으므로 최초 1회만 발화.
+    func testLimitAlertDoesNotRefireOnRepeatedSameUtilization() {
+        var tiers: [String: Int] = [:]
+        XCTAssertEqual(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).count, 1)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 90)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+    }
+
+    /// 경고선 아래로 내려가면(창 리셋 등) 재무장 — 다음 상승 시 새 에피소드로 다시 1회 발화.
+    func testLimitAlertRearmsAfterDroppingBelowWarn() {
+        var tiers: [String: Int] = [:]
+        _ = UsageStore.evaluateLimitAlerts(windows: [("주간", 82)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertTrue(UsageStore.evaluateLimitAlerts(windows: [("주간", 40)], warn: 80, crit: 95, tiers: &tiers).isEmpty)
+        XCTAssertEqual(
+            UsageStore.evaluateLimitAlerts(windows: [("주간", 85)], warn: 80, crit: 95, tiers: &tiers),
+            [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 85)])
+    }
+
+    /// 여러 창은 독립 추적 — 5h 가 이미 위험 발화해도 주간은 자기 임계값에서 별도 1회.
+    func testLimitAlertTracksWindowsIndependently() {
+        var tiers: [String: Int] = [:]
+        let first = UsageStore.evaluateLimitAlerts(
+            windows: [("5시간", 96), ("주간", 50)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertEqual(first, [UsageStore.LimitAlert(window: "5시간", isCritical: true, utilization: 96)])
+        let second = UsageStore.evaluateLimitAlerts(
+            windows: [("5시간", 97), ("주간", 82)], warn: 80, crit: 95, tiers: &tiers)
+        XCTAssertEqual(second, [UsageStore.LimitAlert(window: "주간", isCritical: false, utilization: 82)])
+    }
+
     // MARK: 집계
 
     func testAggregatesTodayTokensAcrossProviders() async {
