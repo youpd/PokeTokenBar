@@ -1,4 +1,3 @@
-import ServiceManagement
 import SwiftUI
 
 struct SettingsView: View {
@@ -6,7 +5,7 @@ struct SettingsView: View {
     @Environment(CompanionStore.self) private var companion
     /// 팝오버 내부 화면 전환 방식 — sheet/dismiss 를 쓰지 않는다 (PopoverView 의 NOTE 참조)
     var onClose: () -> Void
-    @State private var launchAtLogin = SMAppService.mainApp.status == .enabled
+    @State private var launchAtLogin = LoginItem.isEnabled
     @State private var launchAtLoginError: String?
     @State private var reportError: String?
     @State private var advancedExpanded = false
@@ -126,12 +125,11 @@ struct SettingsView: View {
                     .disabled(!isBundledApp)
                     .onChange(of: launchAtLogin) { _, newValue in
                         do {
-                            if newValue { try SMAppService.mainApp.register() }
-                            else { try SMAppService.mainApp.unregister() }
+                            try LoginItem.setEnabled(newValue)   // KeepAlive 에이전트(로그인 실행+크래시 재실행)
                             launchAtLoginError = nil
                         } catch {
                             launchAtLoginError = "\(error.localizedDescription)"
-                            launchAtLogin = SMAppService.mainApp.status == .enabled
+                            launchAtLogin = LoginItem.isEnabled
                         }
                     }
             }
