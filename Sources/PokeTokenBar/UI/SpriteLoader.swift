@@ -5,6 +5,8 @@ actor SpriteStore {
     static let shared = SpriteStore()
     private let base = "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon"
     private var mem: [String: Data] = [:]
+    private var memOrder: [String] = []   // LRU 순서(최근 접근이 뒤). 상한 초과 시 앞(오래된 것)부터 evict
+    private let memLimit = 24              // in-memory 스프라이트 캐시 상한 — 세션 중 종 변경 누적 무한증가 방지(#H1)
     private let dir: URL = {
         let d = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("PokeTokenBar/sprites")
@@ -19,10 +21,10 @@ actor SpriteStore {
 
     func data(speciesID: Int, animated: Bool, shiny: Bool = false) async -> Data? {
         let key = Self.cacheKey(speciesID: speciesID, animated: animated, shiny: shiny)
-        if let d = mem[key] { return d }
+        if let d = mem[key] { touch(key); return d }
         let ext = animated ? "gif" : "png"
         let file = dir.appendingPathComponent("\(key).\(ext)")
-        if let d = try? Data(contentsOf: file) { mem[key] = d; return d }
+        if let d = try? Data(contentsOf: file) { remember(key, d); return d }
         let urlStr: String
         switch (animated, shiny) {
         case (true, false):  urlStr = "\(base)/versions/generation-v/black-white/animated/\(speciesID).gif"
@@ -34,8 +36,23 @@ actor SpriteStore {
               let (d, resp) = try? await URLSession.shared.data(from: url),
               (resp as? HTTPURLResponse)?.statusCode == 200, !d.isEmpty else { return nil }
         try? d.write(to: file)
-        mem[key] = d
+        remember(key, d)
         return d
+    }
+
+    /// in-memory 캐시에 넣고 LRU 상한 유지(#H1) — 세션 중 종이 여러 번 바뀌어도 무한 성장 방지.
+    private func remember(_ key: String, _ data: Data) {
+        mem[key] = data
+        touch(key)
+        while memOrder.count > memLimit {
+            let old = memOrder.removeFirst()
+            mem.removeValue(forKey: old)
+        }
+    }
+    /// 접근/삽입 키를 최근(뒤)으로 이동 — 활성 종이 evict 되지 않게 하는 LRU.
+    private func touch(_ key: String) {
+        if let i = memOrder.firstIndex(of: key) { memOrder.remove(at: i) }
+        memOrder.append(key)
     }
 }
 
