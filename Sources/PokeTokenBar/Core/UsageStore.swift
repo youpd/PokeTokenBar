@@ -109,28 +109,26 @@ final class UsageStore {
     /// 사용량 데이터(스냅샷)가 하나라도 있는가 — companion sleep 판정용
     var hasUsageData: Bool { !snapshots.isEmpty }
 
-    /// 메뉴바 표시 줄 — 사용량(토큰·비용)을 윗줄에 나란히, 한도를 아랫줄로. **최대 2줄**(3줄은
-    /// 가독성 저하로 사용자가 반려). 한도는 **오늘 실제 사용한 프로바이더만** 노출한다(오늘 미사용
-    /// 프로바이더가 뜨지 않게 — snapshots 의 오늘 토큰>0 으로 게이트). 한도 소스는 프로바이더
-    /// 고유(Claude=OAuth·Codex=프로세스)라 providerID 로 명시 분기(확장 규약 §"프로바이더 고유 동작").
+    /// 메뉴바 표시 줄 — 켜진 항목을 **각각 세로로** 쌓는다: 토큰 / 비용 / 한도(각 1줄).
+    /// 토큰·비용을 가로로 합치지 않는다(사용자 요청: 토큰 위·비용 아래). 3개 다 켜면 3줄.
+    /// 한도는 **오늘 실제 사용한 프로바이더만** 노출(snapshots 의 오늘 토큰>0 게이트), 한 줄에 나란히.
+    /// 한도 소스는 프로바이더 고유(Claude=OAuth·Codex=프로세스)라 providerID 로 명시 분기(확장 규약).
     var menuLines: [String] {
         guard lastUpdated != nil else { return ["—"] }
-        var usage: [String] = []
-        if showTokensInMenu { usage.append(TokenFormatter.compact(todayTotalTokens)) }
-        if showCostInMenu { usage.append(TokenFormatter.costCompact(todayCostTotal)) }
-        var limitParts: [String] = []
+        var lines: [String] = []
+        if showTokensInMenu { lines.append(TokenFormatter.compact(todayTotalTokens)) }
+        if showCostInMenu { lines.append(TokenFormatter.costCompact(todayCostTotal)) }
         if showLimitInMenu {
             let usedToday = Set(snapshots.filter { $0.todayTotalTokens > 0 }.map(\.providerID))
+            var limitParts: [String] = []
             if usedToday.contains("claude_code"), let utilization = limits?.fiveHour?.utilization {
                 limitParts.append("Claude \(TokenFormatter.percent(utilization))")
             }
             if usedToday.contains("codex"), let usedPercent = codexLimits?.maxPrimaryUsedPercent {
                 limitParts.append("Codex \(TokenFormatter.percent(Double(usedPercent)))")
             }
+            if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }   // 한도 1줄(프로바이더 나란히)
         }
-        var lines: [String] = []
-        if !usage.isEmpty { lines.append(usage.joined(separator: " · ")) }            // 윗줄: 토큰·비용 나란히
-        if !limitParts.isEmpty { lines.append(limitParts.joined(separator: " · ")) }  // 아랫줄: 한도
         return lines   // 빈 배열이면 아이콘만
     }
 
