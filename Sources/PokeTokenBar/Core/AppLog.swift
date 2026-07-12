@@ -14,8 +14,10 @@ enum AppLog {
 
     private static let queue = DispatchQueue(label: "poketokenbar.log")
 
-    /// 로그 상한 — 초과 시 .old 로 1세대 회전(무한 증가 방지, 디스크 상한 ≈ 2×512KB).
-    private static let maxBytes = 512 * 1024
+    /// 로그 상한 — 초과 시 .old 로 1세대 회전(무한 증가 방지, 디스크 상한 ≈ 2×maxBytes = 4MB).
+    /// 24/7 메뉴바 앱이라 회전이 잦아 진단 이력이 금방 사라지던 것 완화(장애 직전 컨텍스트 보존).
+    /// 레퍼런스(size-capped 회전, 수 MB)에 맞춤 — 일자별 폴더는 무한 성장/정리 필요라 채택 안 함.
+    private static let maxBytes = 2 * 1024 * 1024
 
     static func write(_ message: String) {
         let line = "[\(ISO8601DateFormatter().string(from: Date()))] \(message)\n"
