@@ -235,23 +235,31 @@ struct CompanionHeader: View {
     }
 }
 
-/// 희귀도 1종 요약 캡슐 — 색 점 + 라벨 + 개수. 0이면 흐리게.
+/// 희귀도 1종 캡슐 — 색 점 + 라벨 + 개수. 선택 시 원색 링 + 체크마크로 강조.
+/// (solid 채움 대신 링+체크 — green/orange 위 흰 텍스트 대비 문제 회피 + 라이트/다크 양쪽 가독.
+///  텍스트는 .primary 라 모드 자동 적응, 색 정체성은 점·링·체크로 유지 → 엔트리 배지와 안 어긋남.)
+/// 0이면 흐리게(필터 불가).
 struct RarityTally: View {
     let label: String
     let count: Int
     let color: Color
-    var isSelected: Bool = false      // 이 희귀도로 필터 활성 → solid 채움
+    var isSelected: Bool = false      // 이 희귀도로 필터 활성 → 원색 링 + 체크
     var body: some View {
         HStack(spacing: 3) {
-            Circle().fill(isSelected ? .white : color).frame(width: 6, height: 6)
-            Text(label).font(.system(size: 9, weight: .medium))
+            Circle().fill(color).frame(width: 6, height: 6)
+            Text(label).font(.system(size: 9, weight: isSelected ? .semibold : .medium))
             Text("\(count)").font(.system(size: 9, weight: .bold))
+            if isSelected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 7, weight: .bold)).foregroundStyle(color)
+            }
         }
-        .foregroundStyle(isSelected ? .white : .primary)
+        .foregroundStyle(.primary)
         .padding(.horizontal, 6).padding(.vertical, 2)
-        .background(isSelected ? color : color.opacity(0.12))
+        .background(color.opacity(isSelected ? 0.22 : 0.12))
         .clipShape(Capsule())
-        .overlay(Capsule().strokeBorder(color.opacity(0.35), lineWidth: isSelected ? 0 : 0.5))
+        .overlay(Capsule().strokeBorder(isSelected ? color : color.opacity(0.35),
+                                        lineWidth: isSelected ? 1.5 : 0.5))
         .opacity(count == 0 ? 0.4 : 1)
     }
 }
