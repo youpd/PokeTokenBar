@@ -20,6 +20,12 @@ enum AppLanguage: String, Codable, Sendable, CaseIterable {
         switch self { case .ko: return "한국어"; case .en: return "English"; case .ja: return "日本語" }
     }
 
+    /// byLang(langCode→name) 에서 이 언어의 이름을 고른다(apiCodes 첫 매칭 → 영어 폴백).
+    func resolveName(_ byLang: [String: String]) -> String? {
+        for code in apiCodes { if let n = byLang[code] { return n } }
+        return byLang["en"]
+    }
+
     /// 신규 설치 기본 언어 — 시스템 선호 언어에서 유추(글로벌 출시: 한국어 강제 금지).
     /// ko/ja 만 매칭, 그 외 전부 영어(fallback-of-fallback). 기존 사용자는 저장된 언어를 그대로 쓴다.
     static var systemDefault: AppLanguage {
@@ -103,9 +109,7 @@ struct EvoLine: Sendable {
     let names: [Int: [String: String]]
     var totalForms: Int { tree.depth }
     func localizedName(_ id: Int, _ lang: AppLanguage) -> String {
-        guard let byLang = names[id] else { return "#\(id)" }
-        for code in lang.apiCodes { if let n = byLang[code] { return n } }
-        return byLang["en"] ?? "#\(id)"
+        lang.resolveName(names[id] ?? [:]) ?? "#\(id)"   // 폴백 순서는 AppLanguage.resolveName 단일 소스
     }
 }
 
@@ -210,9 +214,14 @@ struct DexEntry: Codable, Sendable, Identifiable {
     var caughtAt: Date?
     var isShiny = false
     var nature: PokemonNature?
+    /// 진화 체인 각 종의 다국어 이름(speciesID → langCode → name). 졸업 시 로드된 라인에서 저장 →
+    /// 도감의 단계별 스프라이트 밑 이름 표시가 네트워크 없이 즉시 + 언어 전환 대응. 구버전 저장분엔
+    /// 없어(nil) 뷰가 line fetch 로 조회 후 백필한다.
+    var names: [Int: [String: String]]?
 
     init(baseID: Int, finalID: Int, chainOrder: [Int], rarity: Rarity,
-         caughtAt: Date?, isShiny: Bool = false, nature: PokemonNature? = nil) {
+         caughtAt: Date?, isShiny: Bool = false, nature: PokemonNature? = nil,
+         names: [Int: [String: String]]? = nil) {
         self.baseID = baseID
         self.finalID = finalID
         self.chainOrder = chainOrder
@@ -220,6 +229,7 @@ struct DexEntry: Codable, Sendable, Identifiable {
         self.caughtAt = caughtAt
         self.isShiny = isShiny
         self.nature = nature
+        self.names = names
     }
 
     // 하위호환 디코딩 (MonState 와 동일 이유).
@@ -233,6 +243,9 @@ struct DexEntry: Codable, Sendable, Identifiable {
         caughtAt = try c.decodeIfPresent(Date.self, forKey: .caughtAt)
         isShiny = try c.decodeIfPresent(Bool.self, forKey: .isShiny) ?? false
         nature = try c.decodeIfPresent(PokemonNature.self, forKey: .nature)
+        // try? — 구버전(최종체 단일 [String:String]) 형식이 남아 있어도 종별 맵 디코딩 실패 시 nil 로
+        // 강등(항목 전체 로드는 유지). 뷰가 line 조회로 백필한다.
+        names = (try? c.decodeIfPresent([Int: [String: String]].self, forKey: .names)) ?? nil
     }
 }
 

@@ -75,6 +75,12 @@ private struct FallbackOnlyProvider: PokeProviding {
     func baseSpecies(id: Int) async throws -> BaseSpecies? { BaseSpecies(id: id, captureRate: 100) }
 }
 
+/// line() 자체가 실패(오프라인) — 도감 이름 조회 폴백 검증용.
+private struct LineThrowsProvider: PokeProviding {
+    func line(baseSpeciesID: Int) async throws -> EvoLine { throw PokeStubError.boom }
+    func baseSpeciesIndex() async throws -> [BaseSpecies] { [] }
+}
+
 /// 샘플러 테스트용 — 주입한 base 인덱스 + 요청 id 그대로의 무진화 라인 반환.
 final class IndexProvider: PokeProviding, @unchecked Sendable {
     nonisolated(unsafe) var index: [BaseSpecies] = []
@@ -110,6 +116,70 @@ final class CompanionStoreTests: XCTestCase {
     private func store(_ line: EvoLine, seed: UInt64 = 7) -> CompanionStore {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("poke-\(UUID().uuidString).json")
         return CompanionStore(provider: StubProvider(value: line), clock: { fixedNow }, fileURL: url, rng: SeededRNG(seed: seed))
+    }
+
+    // MARK: 도감 이름 (컬렉션 표시)
+
+    /// 저장된 체인 종별 다국어 이름을 현재 언어로 해석 — 없으면 nil(뷰가 async 조회로 폴백).
+    func testDexStoredChainNamesResolvePerLanguage() {
+        let s = store(linear3)
+        let named = DexEntry(baseID: 1, finalID: 3, chainOrder: [1, 2, 3], rarity: .common, caughtAt: nil,
+                             names: [1: ["ko": "포1", "en": "P1"], 2: ["ko": "포2", "en": "P2"], 3: ["ko": "포3", "en": "P3"]])
+        s.setLanguage(.ko); XCTAssertEqual(s.dexStoredChainNames(named), [1: "포1", 2: "포2", 3: "포3"])
+        s.setLanguage(.en); XCTAssertEqual(s.dexStoredChainNames(named), [1: "P1", 2: "P2", 3: "P3"])
+        // 저장 이름 없음 → nil
+        XCTAssertNil(s.dexStoredChainNames(DexEntry(baseID: 1, finalID: 3, chainOrder: [1, 2, 3],
+                                                    rarity: .common, caughtAt: nil)))
+    }
+
+    /// 이름 미저장(구버전) 항목은 line 조회로 체인 전 종의 이름을 얻는다(chainOrder 전부 채움).
+    func testDexResolveChainNamesFetchesWhenUnstored() async {
+        let s = store(linear3)   // line 이름: 포1/포2/포3
+        s.setLanguage(.ko)
+        let bare = DexEntry(baseID: 1, finalID: 3, chainOrder: [1, 2, 3], rarity: .common, caughtAt: nil)
+        let names = await s.dexResolveChainNames(bare)
+        XCTAssertEqual(names, [1: "포1", 2: "포2", 3: "포3"])
+    }
+
+    /// 졸업 시 체인 각 종의 다국어 이름이 도감 항목에 저장된다 → 단계별 표시가 네트워크 없이 즉시.
+    func testGraduationStoresChainNames() async {
+        let s = store(linear3)
+        await s.hatch(baseID: 1)
+        s.applyUsage(PokemonBalance.phaseThreshold(rarity: .common, totalForms: 3, stageIndex: 0))  // →2
+        s.applyUsage(PokemonBalance.phaseThreshold(rarity: .common, totalForms: 3, stageIndex: 1))  // →3(최종)
+        s.applyUsage(PokemonBalance.phaseThreshold(rarity: .common, totalForms: 3, stageIndex: 2))  // 졸업
+        XCTAssertEqual(s.state.dex.count, 1)
+        XCTAssertEqual(s.state.dex.first?.chainOrder, [1, 2, 3])
+        XCTAssertEqual(s.state.dex.first?.names?[1]?["ko"], "포1")   // 초기 단계도 저장
+        XCTAssertEqual(s.state.dex.first?.names?[3]?["ja"], "ポ3")   // 최종 단계도 저장
+        s.setLanguage(.ko)
+        XCTAssertEqual(s.state.dex.first.map { s.dexStoredChainNames($0) }, [1: "포1", 2: "포2", 3: "포3"])
+    }
+
+    /// 백필(트리거 브랜치): 이름 미저장(구버전) 항목을 조회하면 line 에서 체인 이름을 얻어 **항목에 저장**
+    /// 한다. 구버전 저장 JSON(“names” 키 없음)을 로드해 실제 마이그레이션 경로를 재현한다.
+    func testDexResolveChainNamesBackfillsLegacyEntry() async {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("poke-\(UUID().uuidString).json")
+        let json = #"{"dex":[{"id":"e1","baseID":1,"finalID":3,"chainOrder":[1,2,3],"rarity":"common"}]}"#
+        try? json.data(using: .utf8)!.write(to: url)
+        let s = CompanionStore(provider: StubProvider(value: linear3), clock: { fixedNow },
+                               fileURL: url, rng: SeededRNG(seed: 7))
+        s.setLanguage(.ko)
+        XCTAssertEqual(s.state.dex.count, 1)                        // 구버전 JSON 로드 성공
+        XCTAssertNil(s.state.dex.first?.names)                      // 이름 없음(구버전)
+        let names = await s.dexResolveChainNames(s.state.dex[0])
+        XCTAssertEqual(names, [1: "포1", 2: "포2", 3: "포3"])       // fetch 로 체인 전부
+        XCTAssertEqual(s.state.dex.first?.names?[2]?["ko"], "포2")  // 항목에 백필 저장됨(트리거 브랜치)
+    }
+
+    /// 오프라인(line fetch 실패) + 저장 없음 → chainOrder 전 종을 종 번호(#id)로 폴백.
+    func testDexResolveChainNamesOfflineFallback() async {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("poke-\(UUID().uuidString).json")
+        let s = CompanionStore(provider: LineThrowsProvider(), clock: { fixedNow },
+                               fileURL: url, rng: SeededRNG(seed: 7))
+        let bare = DexEntry(baseID: 1, finalID: 3, chainOrder: [1, 2, 3], rarity: .common, caughtAt: nil)
+        let names = await s.dexResolveChainNames(bare)
+        XCTAssertEqual(names, [1: "#1", 2: "#2", 3: "#3"])
     }
 
     func testInstallBaselineExcludesPreInstallUsage() {

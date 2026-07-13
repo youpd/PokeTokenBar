@@ -91,18 +91,29 @@ struct EvoLineView: View {
     let nodes: [(id: Int, kind: String)]
     var thumb: CGFloat = 40
     var shiny: Bool = false     // 개체가 shiny 면 라인 전체를 shiny 스프라이트로
+    var names: [Int: String]? = nil   // 제공되면 각 스프라이트 밑에 작은 이름 라벨(도감 단계별 이름)
     var body: some View {
-        HStack(spacing: 2) {
+        HStack(alignment: .top, spacing: 2) {
             ForEach(Array(nodes.enumerated()), id: \.offset) { i, node in
-                if i > 0 { Image(systemName: "arrow.right").font(.system(size: thumb * 0.2)).foregroundStyle(.tertiary) }
-                SpriteView(speciesID: node.id, size: thumb, shiny: shiny)
-                    .opacity(node.kind == "future" ? 0.32 : 1)
-                    .saturation(node.kind == "future" ? 0.4 : 1)
-                    .overlay(alignment: .bottom) {
-                        if node.kind == "cur" {
-                            Circle().fill(Color.accentColor).frame(width: 4, height: 4).offset(y: 2)
+                if i > 0 {
+                    Image(systemName: "arrow.right").font(.system(size: thumb * 0.2))
+                        .foregroundStyle(.tertiary).padding(.top, thumb * 0.4)   // 스프라이트 세로 중앙에 정렬
+                }
+                VStack(spacing: 1) {
+                    SpriteView(speciesID: node.id, size: thumb, shiny: shiny)
+                        .opacity(node.kind == "future" ? 0.32 : 1)
+                        .saturation(node.kind == "future" ? 0.4 : 1)
+                        .overlay(alignment: .bottom) {
+                            if node.kind == "cur" {
+                                Circle().fill(Color.accentColor).frame(width: 4, height: 4).offset(y: 2)
+                            }
                         }
+                    if let names {
+                        Text(names[node.id] ?? "…")
+                            .font(.system(size: 8)).foregroundStyle(.secondary)
+                            .lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: thumb + 6)
                     }
+                }
             }
         }
     }
@@ -319,27 +330,7 @@ struct CollectionView: View {
                         }
                     }
                     ForEach(visibleEntries) { entry in
-                        VStack(alignment: .leading, spacing: 3) {
-                            HStack {
-                                Text(store.l.rarityLabel(entry.rarity).uppercased())
-                                    .font(.system(size: 8, weight: .bold))
-                                    .padding(.horizontal, 5).padding(.vertical, 1)
-                                    .background(rarityColor(entry.rarity)).foregroundStyle(.white)
-                                    .clipShape(Capsule())
-                                if entry.isShiny { Text("✨").font(.system(size: 10)) }
-                                Spacer()
-                                let nature = entry.nature.map { "\($0.name(store.language)) · " } ?? ""
-                                Text(nature + store.l.formsComplete(entry.chainOrder.count))
-                                    .font(.system(size: 9)).foregroundStyle(.secondary)
-                            }
-                            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 56, shiny: entry.isShiny)
-                            if let caughtAt = entry.caughtAt {
-                                Text(caughtAt, style: .relative).font(.system(size: 9)).foregroundStyle(.tertiary)
-                            }
-                        }
-                        .padding(8)
-                        .background(Color.secondary.opacity(0.06))
-                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                        DexEntryRow(store: store, entry: entry)
                     }
                 }
             }
@@ -358,5 +349,45 @@ struct CollectionView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 28)
+    }
+}
+
+/// 도감 한 항목 — 희귀도·성격 헤더 + 진화 체인 스프라이트(각 밑에 종 이름) + 잡은 시각.
+/// 체인 각 종의 이름은 저장분이 있으면 body 에서 즉시(플래시 없음), 없으면(구버전) .task 로 조회 후 백필.
+private struct DexEntryRow: View {
+    let store: CompanionStore
+    let entry: DexEntry
+    @State private var resolved: [Int: String] = [:]
+
+    var body: some View {
+        // 저장분 우선(즉시·언어대응), 없으면 async 로 채운 resolved 사용.
+        let names = resolved.isEmpty ? store.dexStoredChainNames(entry) : resolved
+        VStack(alignment: .leading, spacing: 3) {
+            HStack {
+                Text(store.l.rarityLabel(entry.rarity).uppercased())
+                    .font(.system(size: 8, weight: .bold))
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(rarityColor(entry.rarity)).foregroundStyle(.white)
+                    .clipShape(Capsule())
+                if entry.isShiny { Text("✨").font(.system(size: 10)) }
+                Spacer()
+                let nature = entry.nature.map { "\($0.name(store.language)) · " } ?? ""
+                Text(nature + store.l.formsComplete(entry.chainOrder.count))
+                    .font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+            EvoLineView(nodes: entry.chainOrder.map { ($0, "done") }, thumb: 56,
+                        shiny: entry.isShiny, names: names)
+            if let caughtAt = entry.caughtAt {
+                Text(caughtAt, style: .relative).font(.system(size: 9)).foregroundStyle(.tertiary)
+            }
+        }
+        .padding(8)
+        .background(Color.secondary.opacity(0.06))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .task(id: "\(entry.id)-\(store.language.rawValue)") {
+            if store.dexStoredChainNames(entry) == nil {   // 저장분 없으면(구버전) 조회
+                resolved = await store.dexResolveChainNames(entry)
+            }
+        }
     }
 }

@@ -115,6 +115,32 @@ final class CompanionStore {
     /// 희귀도별 도감 개수(요약 헤더용).
     func dexCount(_ rarity: Rarity) -> Int { state.dex.lazy.filter { $0.rarity == rarity }.count }
 
+    /// 도감 항목 진화 체인 각 종의 이름(speciesID → 현재 언어 이름). 저장돼 있으면 즉시(네트워크 0),
+    /// 없으면 nil(뷰가 async 조회로 폴백).
+    func dexStoredChainNames(_ entry: DexEntry) -> [Int: String]? {
+        guard let names = entry.names, !names.isEmpty else { return nil }
+        return names.compactMapValues { state.language.resolveName($0) }
+    }
+
+    /// 이름 미저장(구버전) 항목용 — line 을 1회 조회해 체인 전 종의 다국어 이름을 얻고 항목에 백필한다
+    /// (다음부터 네트워크 0). 저장돼 있으면 그대로(fetch 없음). 오프라인이면 종 번호(#id)로 폴백.
+    /// 반환은 chainOrder 전 종을 채운 [speciesID: 현재 언어 이름].
+    func dexResolveChainNames(_ entry: DexEntry) async -> [Int: String] {
+        if let stored = dexStoredChainNames(entry) { return stored }
+        guard let line = try? await provider.line(baseSpeciesID: entry.baseID) else {
+            return Dictionary(uniqueKeysWithValues: entry.chainOrder.map { ($0, "#\($0)") })
+        }
+        let chainNames = Dictionary(uniqueKeysWithValues:
+            entry.chainOrder.compactMap { id in line.names[id].map { (id, $0) } })
+        if !chainNames.isEmpty, let idx = state.dex.firstIndex(where: { $0.id == entry.id }) {
+            state.dex[idx].names = chainNames   // 백필 저장
+            save()
+        }
+        return Dictionary(uniqueKeysWithValues: entry.chainOrder.map { id in
+            (id, chainNames[id].flatMap { state.language.resolveName($0) } ?? "#\(id)")
+        })
+    }
+
     // MARK: 갱신 (AppDelegate 가 UsageStore 값으로 호출)
 
     func update(todayTokens: Int, todayDate: String, monthTotal: Int,
@@ -211,7 +237,11 @@ final class CompanionStore {
         state.collectedFinals.insert("\(a.baseID):\(finalID)")
         state.dex.append(DexEntry(baseID: a.baseID, finalID: finalID,
                                   chainOrder: a.pathIDs, rarity: a.rarity, caughtAt: clock(),
-                                  isShiny: a.isShiny, nature: a.nature))
+                                  isShiny: a.isShiny, nature: a.nature,
+                                  names: currentLine.map { line in   // 체인 각 종의 다국어 이름 저장(표시 즉시)
+                                      Dictionary(uniqueKeysWithValues:
+                                          a.pathIDs.compactMap { id in line.names[id].map { (id, $0) } })
+                                  }))
         let name = currentLine?.localizedName(finalID, state.language) ?? ""
         justGraduated = name
         notifyCompanionEvent(l.notifGraduateTitle, l.notifGraduateBody(name))
