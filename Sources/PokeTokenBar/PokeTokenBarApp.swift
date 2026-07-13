@@ -98,19 +98,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// 않아 메뉴바 명암(라이트/다크)·비활성(appearsDisabled) 상태에 자동 적응한다.
     private static func applyMenuText(_ lines: [String], to button: NSStatusBarButton) {
         if lines.count >= 2 {
-            // 줄당 높이 = 메뉴바 두께 / (줄 수 × 1.2[폰트 자연 줄높이 배수]). 7~11pt 로 클램프.
-            // (노치맥 메뉴바는 더 두꺼워 큰 폰트, 일반은 작게 → 2줄이든 3줄이든 안 잘리게.)
+            // NSStatusBarButton 은 멀티라인 title 을 세로 중앙에 두지 않고 위로 치우쳐 그린다(측정:
+            // titleRect.y 가 음수 → 상단 클리핑 + 하단 여백, 사용자 지적). 그래서 baselineOffset 을
+            // '런타임 측정'으로 보정한다: offset 0 으로 한번 세팅해 셀이 계산한 title 상자(titleRect)를
+            // 재고, 그 상자 중앙을 버튼 중앙에 맞추는 offset 을 역산해 재적용. 매직넘버 없이 두께·폰트·
+            // 아이콘에 자동 적응. 줄높이는 폰트 자연 줄높이(×1.16)보다 크게 둬 어센더 클리핑을 막는다.
             let thickness = NSStatusBar.system.thickness
-            let fontSize = min(11, max(7, (thickness / (CGFloat(lines.count) * 1.2)).rounded(.down)))
-            let para = NSMutableParagraphStyle()
-            para.alignment = .center
-            para.lineHeightMultiple = 0.9
-            button.attributedTitle = NSAttributedString(
-                string: lines.joined(separator: "\n"),
-                attributes: [
-                    .font: NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular),
-                    .paragraphStyle: para,
-                ])
+            let share = thickness / CGFloat(lines.count)                 // 줄당 몫
+            let fontSize = min(11, max(8, (share * 0.85).rounded(.down)))
+            let effLH = min(share, (fontSize * 1.28).rounded())          // 자연 줄높이보다 크게(어센더 클리핑 방지)
+            let font = NSFont.monospacedDigitSystemFont(ofSize: fontSize, weight: .regular)
+            func titled(_ offset: CGFloat) -> NSAttributedString {
+                let para = NSMutableParagraphStyle()
+                para.alignment = .center
+                para.minimumLineHeight = effLH
+                para.maximumLineHeight = effLH
+                return NSAttributedString(
+                    string: lines.joined(separator: "\n"),
+                    attributes: [.font: font, .paragraphStyle: para, .baselineOffset: offset])
+            }
+            let bounds = button.bounds
+            if bounds.height > 1 {
+                // 1) offset 0 으로 측정 → 2) 상자 중앙을 버튼 중앙에 맞추는 보정량 역산 → 3) 재적용.
+                // (측정용 title 은 표시 전 즉시 교체되므로 깜빡임 없음.)
+                button.attributedTitle = titled(0)
+                let r0 = (button.cell as? NSButtonCell)?.titleRect(forBounds: bounds) ?? bounds
+                button.attributedTitle = titled(r0.midY - bounds.midY)
+            } else {
+                button.attributedTitle = titled(0)   // 레이아웃 전(폭 0) — 보정 없이, 다음 갱신에 재보정
+            }
         } else {
             // 1줄로 되돌릴 때 이전 attributedTitle 이 남지 않게 먼저 비운다.
             button.attributedTitle = NSAttributedString(string: "")
