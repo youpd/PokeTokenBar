@@ -402,8 +402,10 @@ private func rcCodex(primary: Int? = nil, secondary: Int? = nil, individual: Int
 
 @MainActor
 final class RareCandyGrantIntegrationTests: XCTestCase {
-    private var defaults: UserDefaults!
-    private var suiteName: String!
+    // nonisolated(unsafe): sync setUp/tearDown 은 릴리스 Swift 에서 nonisolated → main-actor 프로퍼티
+    // 접근이 컴파일 에러. XCTest 인스턴스별 직렬 실행이라 데이터 레이스 없음. (UsageStoreTests 와 동일)
+    nonisolated(unsafe) private var defaults: UserDefaults!
+    nonisolated(unsafe) private var suiteName: String!
     override func setUp() {
         super.setUp()
         suiteName = "rc-int-\(UUID().uuidString)"
@@ -552,7 +554,9 @@ final class RareCandyGrantIntegrationTests: XCTestCase {
     /// 지급 알림 대상 창 이름이 세션/주간 모두 candyEligibleWindows 에 실제로 담기는지(본문 "왜 받는지").
     /// Claude: "Claude 5시간 세션"/"Claude 주간". Codex: "Codex 5시간 세션"/"Codex 주간".
     func testEligibleWindowNamesForNotificationBody() async {
+        // 로케일 무관하게 한국어 창 이름 검증 — CI 는 영어 로케일이라 명시 고정 필요.
         let claudeStore = usage(claude: rcClaude(fiveHour: 100, sevenDay: 100))
+        claudeStore.localizationLanguage = .ko
         await claudeStore.refresh(scheduleEmptyRetry: false)
         let claudeNames = Dictionary(uniqueKeysWithValues: claudeStore.candyEligibleWindows.map { ($0.key, $0.name) })
         XCTAssertEqual(claudeNames["claude.fiveHour"], "Claude 5시간 세션")
@@ -560,6 +564,7 @@ final class RareCandyGrantIntegrationTests: XCTestCase {
 
         let codexStore = usage(codex: rcCodex(primary: 100, secondary: 100),
                                providers: [RCFakeProvider(id: "codex", displayName: "Codex", daily: rcDaily(1_000))])
+        codexStore.localizationLanguage = .ko
         await codexStore.refresh(scheduleEmptyRetry: false)
         let codexNames = Dictionary(uniqueKeysWithValues: codexStore.candyEligibleWindows.map { ($0.key, $0.name) })
         XCTAssertEqual(codexNames["codex.codex.primary"], "Codex 5시간 세션")
