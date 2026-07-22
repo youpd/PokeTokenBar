@@ -380,9 +380,18 @@ public sealed class CompanionTests
     public async Task SpriteStoreUsesExpectedKeysDiskCacheAndLruBound()
     {
         using var temporary = new TemporaryDirectory();
-        var handler = new RoutingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        Uri? eggUri = null;
+        var handler = new RoutingHandler(request =>
         {
-            Content = new ByteArrayContent([1, 2, 3]),
+            if (request.RequestUri?.AbsolutePath.EndsWith("/egg.png", StringComparison.Ordinal) == true)
+            {
+                eggUri = request.RequestUri;
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new ByteArrayContent([1, 2, 3]),
+            };
         });
         using var store = new SpriteStore(temporary.Path, new HttpClient(handler));
 
@@ -394,8 +403,17 @@ public sealed class CompanionTests
                 cancellationToken: TestContext.Current.CancellationToken));
         }
 
+        Assert.NotNull(await store.GetEggAsync(TestContext.Current.CancellationToken));
+
         Assert.Equal("25-sha", SpriteStore.CacheKey(25, animated: true, shiny: true));
         Assert.True(store.MemoryCount <= 24);
+        Assert.Equal(
+            "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/egg.png",
+            eggUri?.AbsoluteUri);
+        Assert.True(File.Exists(Path.Combine(temporary.Path, "egg.png")));
+        Assert.Equal(
+            Path.GetFullPath(Path.Combine(temporary.Path, "egg.png")),
+            store.FindCachedEggPath());
         Assert.True(File.Exists(Path.Combine(temporary.Path, "1-s.png")));
         Assert.Equal(
             Path.GetFullPath(Path.Combine(temporary.Path, "1-s.png")),

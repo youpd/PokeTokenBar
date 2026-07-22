@@ -1,5 +1,6 @@
 using System.IO;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 using PokeTokenBar.App.Platform;
@@ -228,10 +229,19 @@ public partial class App : Application
         return roots;
     }
 
-    private static void OnDispatcherUnhandledException(
+    private void OnDispatcherUnhandledException(
         object sender,
         DispatcherUnhandledExceptionEventArgs e)
     {
+        if (e.Exception is ExternalException &&
+            e.Exception.ToString().Contains("H.NotifyIcon", StringComparison.Ordinal))
+        {
+            AppLog.Write($"recovered notify icon exception: {e.Exception.Message}");
+            e.Handled = true;
+            _trayController?.RecoverTrayIcon();
+            return;
+        }
+
         CrashReporter.Report(e.Exception, "DispatcherUnhandledException");
         e.Handled = false;
     }

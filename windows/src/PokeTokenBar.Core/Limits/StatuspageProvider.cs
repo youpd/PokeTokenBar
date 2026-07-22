@@ -9,8 +9,17 @@ public sealed class StatuspageProvider : IProviderStatusProvider, IDisposable
         new Dictionary<string, Uri>(StringComparer.Ordinal)
         {
             ["claude_code"] = new("https://status.anthropic.com/api/v2/status.json"),
-            ["codex"] = new("https://status.openai.com/api/v2/status.json"),
+            ["codex"] = new("https://status.openai.com/api/v2/components.json"),
         };
+
+    private static readonly HashSet<string> CodexComponents = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "Codex API",
+        "Codex Web",
+        "Codex in ChatGPT Desktop",
+        "CLI",
+        "VS Code extension",
+    };
 
     private readonly HttpClient _httpClient;
     private readonly bool _ownsClient;
@@ -46,16 +55,13 @@ public sealed class StatuspageProvider : IProviderStatusProvider, IDisposable
                         stream,
                         cancellationToken: cancellationToken)
                     .ConfigureAwait(false);
-                var status = json.RootElement.GetProperty("status");
-                var indicatorText = status.GetProperty("indicator").GetString();
-                var description = status.GetProperty("description").GetString() ?? string.Empty;
-                return new KeyValuePair<string, ProviderStatus>?(
-                    new KeyValuePair<string, ProviderStatus>(
-                        pair.Key,
-                        new ProviderStatus(
-                            pair.Key,
-                            ParseIndicator(indicatorText),
-                            description)));
+                var status = pair.Key == "codex"
+                    ? ParseCodexComponents(json.RootElement)
+                    : ParseGlobalStatus(pair.Key, json.RootElement);
+                return status is null
+                    ? null
+                    : new KeyValuePair<string, ProviderStatus>?(
+                        new KeyValuePair<string, ProviderStatus>(pair.Key, status));
             }
             catch (Exception exception) when (
                 exception is not OperationCanceledException ||
@@ -78,6 +84,89 @@ public sealed class StatuspageProvider : IProviderStatusProvider, IDisposable
             _httpClient.Dispose();
         }
     }
+
+    private static ProviderStatus ParseGlobalStatus(string providerId, JsonElement root)
+    {
+        var status = root.GetProperty("status");
+        var indicatorText = status.GetProperty("indicator").GetString();
+        var description = status.GetProperty("description").GetString() ?? string.Empty;
+        return new ProviderStatus(providerId, ParseIndicator(indicatorText), description);
+    }
+
+    private static ProviderStatus? ParseCodexComponents(JsonElement root)
+    {
+        if (!root.TryGetProperty("components", out var components) ||
+            components.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        var relevant = components.EnumerateArray()
+            .Select(component => new
+            {
+                Name = component.TryGetProperty("name", out var name)
+                    ? name.GetString()
+                    : null,
+                Status = component.TryGetProperty("status", out var status)
+                    ? status.GetString()
+                    : null,
+            })
+            .Where(component => component.Name is not null && CodexComponents.Contains(component.Name))
+            .Select(component => new
+            {
+                Name = component.Name!,
+                RawStatus = component.Status,
+                Indicator = ParseComponentStatus(component.Status),
+            })
+            .ToList();
+        if (relevant.Count == 0)
+        {
+            return null;
+        }
+
+        var incidentComponents = relevant
+            .Where(component => component.Indicator is not ProviderStatusIndicator.None)
+            .ToList();
+        if (incidentComponents.Count == 0)
+        {
+            return new ProviderStatus("codex", ProviderStatusIndicator.None, "Operational");
+        }
+
+        var indicator = incidentComponents
+            .OrderByDescending(component => Severity(component.Indicator))
+            .First()
+            .Indicator;
+        var description = string.Join(
+            ", ",
+            incidentComponents.Select(component =>
+                $"{component.Name}: {Humanize(component.RawStatus)}"));
+        return new ProviderStatus("codex", indicator, description);
+    }
+
+    private static ProviderStatusIndicator ParseComponentStatus(string? status) =>
+        status?.ToLowerInvariant() switch
+        {
+            "operational" => ProviderStatusIndicator.None,
+            "degraded_performance" => ProviderStatusIndicator.Minor,
+            "partial_outage" => ProviderStatusIndicator.Major,
+            "major_outage" => ProviderStatusIndicator.Critical,
+            "under_maintenance" => ProviderStatusIndicator.Maintenance,
+            _ => ProviderStatusIndicator.Unknown,
+        };
+
+    private static int Severity(ProviderStatusIndicator indicator) => indicator switch
+    {
+        ProviderStatusIndicator.Critical => 5,
+        ProviderStatusIndicator.Major => 4,
+        ProviderStatusIndicator.Minor => 3,
+        ProviderStatusIndicator.Maintenance => 2,
+        ProviderStatusIndicator.Unknown => 1,
+        _ => 0,
+    };
+
+    private static string Humanize(string? status) => string.IsNullOrWhiteSpace(status)
+        ? "unknown"
+        : status.Replace('_', ' ');
 
     private static ProviderStatusIndicator ParseIndicator(string? indicator) =>
         indicator?.ToLowerInvariant() switch

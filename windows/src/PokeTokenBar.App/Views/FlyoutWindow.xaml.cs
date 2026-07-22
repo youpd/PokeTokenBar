@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using PokeTokenBar.App.Platform;
 using PokeTokenBar.Core.Companion;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Poke;
@@ -27,6 +28,8 @@ public partial class FlyoutWindow : Window
     private readonly DispatcherTimer _bobTimer;
     private bool _bobUp;
     private int _spriteRequestId;
+    private BitmapSource? _eggSprite;
+    private Task<byte[]?>? _eggSpriteTask;
     private readonly HashSet<string> _dexBackfills = new(StringComparer.Ordinal);
     private AvailableUpdate? _availableUpdate;
 
@@ -218,14 +221,24 @@ public partial class FlyoutWindow : Window
         }
 
         var active = _companionStore.State.Active;
+        var request = ++_spriteRequestId;
         if (active is null)
         {
-            CompanionSpriteImage.Visibility = Visibility.Collapsed;
-            CompanionEmojiText.Visibility = Visibility.Visible;
+            CompanionSpriteImage.Source = _eggSprite;
+            CompanionSpriteImage.Visibility = _eggSprite is null
+                ? Visibility.Collapsed
+                : Visibility.Visible;
+            CompanionEmojiText.Visibility = _eggSprite is null
+                ? Visibility.Visible
+                : Visibility.Collapsed;
             CompanionEmojiText.Text = "🥚";
             CompanionNameText.Text = Text.TokenEgg;
             CompanionMetaText.Text = Text.ToHatch(_companionStore.EggTokensToHatch);
             CompanionLineText.Text = string.Empty;
+            if (_eggSprite is null)
+            {
+                _ = LoadEggSpriteAsync(request);
+            }
         }
         else
         {
@@ -239,7 +252,10 @@ public partial class FlyoutWindow : Window
                 "  →  ",
                 _companionStore.LineNodes.Select(node =>
                     node.Kind == "cur" ? $"● #{node.Id}" : $"○ #{node.Id}"));
-            _ = LoadCompanionSpriteAsync(active.CurrentID, _companionStore.CurrentIsShiny);
+            _ = LoadCompanionSpriteAsync(
+                request,
+                active.CurrentID,
+                _companionStore.CurrentIsShiny);
         }
 
         CompanionProgressBar.Value = _companionStore.Progress * 100;
@@ -448,9 +464,36 @@ public partial class FlyoutWindow : Window
         };
     }
 
-    private async Task LoadCompanionSpriteAsync(int id, bool shiny)
+    private async Task LoadEggSpriteAsync(int request)
     {
-        var request = ++_spriteRequestId;
+        if (_spriteStore is null) return;
+        _eggSpriteTask ??= _spriteStore.GetEggAsync();
+        var bytes = await _eggSpriteTask;
+        if (bytes is null)
+        {
+            _eggSpriteTask = null;
+            return;
+        }
+
+        try
+        {
+            _eggSprite ??= SpriteBitmap.Decode(bytes, cropTransparent: true);
+            if (request == _spriteRequestId && _companionStore?.State.Active is null)
+            {
+                CompanionSpriteImage.Source = _eggSprite;
+                CompanionSpriteImage.Visibility = Visibility.Visible;
+                CompanionEmojiText.Visibility = Visibility.Collapsed;
+            }
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"egg sprite decode failed: {exception.Message}");
+            _eggSpriteTask = null;
+        }
+    }
+
+    private async Task LoadCompanionSpriteAsync(int request, int id, bool shiny)
+    {
         if (_spriteStore is null) return;
         var bytes = await _spriteStore.GetSpeciesAsync(id, animated: true, shiny);
         if (request == _spriteRequestId && bytes is not null)

@@ -284,6 +284,65 @@ public sealed class LimitTests
     }
 
     [Fact]
+    public async Task CodexStatusIgnoresUnrelatedOpenAiIncidents()
+    {
+        var endpoints = new Dictionary<string, Uri>(StringComparer.Ordinal)
+        {
+            ["claude_code"] = new("https://status.test/anthropic"),
+            ["codex"] = new("https://status.test/openai-components"),
+        };
+        var handler = new DelegateHandler(request => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent(
+                request.RequestUri!.AbsolutePath.Contains("anthropic", StringComparison.Ordinal)
+                    ? "{\"status\":{\"indicator\":\"none\",\"description\":\"All Systems Operational\"}}"
+                    : """
+                      {"components":[
+                        {"name":"Image Generation","status":"partial_outage"},
+                        {"name":"Codex API","status":"operational"},
+                        {"name":"Codex Web","status":"operational"},
+                        {"name":"CLI","status":"operational"},
+                        {"name":"VS Code extension","status":"operational"}]}
+                      """,
+                Encoding.UTF8,
+                "application/json"),
+        });
+        using var provider = new StatuspageProvider(new HttpClient(handler), endpoints);
+
+        var result = await provider.FetchAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(ProviderStatusIndicator.None, result["claude_code"].Indicator);
+        Assert.Equal(ProviderStatusIndicator.None, result["codex"].Indicator);
+        Assert.Equal("Operational", result["codex"].Description);
+    }
+
+    [Fact]
+    public async Task CodexStatusReportsOnlyAffectedCodexComponents()
+    {
+        var endpoints = new Dictionary<string, Uri>(StringComparer.Ordinal)
+        {
+            ["codex"] = new("https://status.test/openai-components"),
+        };
+        var handler = new DelegateHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""
+                {"components":[
+                  {"name":"Codex API","status":"degraded_performance"},
+                  {"name":"CLI","status":"partial_outage"},
+                  {"name":"File uploads","status":"major_outage"}]}
+                """, Encoding.UTF8, "application/json"),
+        });
+        using var provider = new StatuspageProvider(new HttpClient(handler), endpoints);
+
+        var result = await provider.FetchAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(ProviderStatusIndicator.Major, result["codex"].Indicator);
+        Assert.Contains("Codex API: degraded performance", result["codex"].Description);
+        Assert.Contains("CLI: partial outage", result["codex"].Description);
+        Assert.DoesNotContain("File uploads", result["codex"].Description);
+    }
+
+    [Fact]
     public void BinaryLocatorHonorsManualPathAndNullCacheTtl()
     {
         using var temporary = new TemporaryDirectory();

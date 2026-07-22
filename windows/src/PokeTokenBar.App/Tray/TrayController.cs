@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using H.NotifyIcon;
 using Microsoft.Toolkit.Uwp.Notifications;
 using PokeTokenBar.App.Views;
@@ -12,6 +13,7 @@ using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Poke;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
+using DrawingIcon = System.Drawing.Icon;
 
 namespace PokeTokenBar.App.Tray;
 
@@ -27,17 +29,13 @@ internal sealed class TrayController : IDisposable
     private readonly FlyoutWindow _flyout;
     private readonly StackPanel _tooltipContent = new();
     private readonly TaskbarIcon _trayIcon;
-    private readonly GeneratedIconSource _eggIcon = new()
-    {
-        Text = "🥚",
-        FontFamily = new FontFamily("Segoe UI Emoji"),
-        FontSize = 40,
-        Background = Brushes.Transparent,
-    };
+    private readonly TrayIconFrames _fallbackFrames;
     private readonly DispatcherTimer _animationTimer;
-    private (string Key, GeneratedIconSource Low, GeneratedIconSource High)? _spriteFrames;
+    private TrayIconFrames? _activeFrames;
+    private string? _pendingIconKey;
+    private int _iconRequestId;
     private bool _highFrame;
-    private (string Key, GeneratedIconSource Source)? _numericIcon;
+    private bool _disposed;
     private SettingsWindow? _settingsWindow;
 
     public TrayController(
@@ -58,10 +56,25 @@ internal sealed class TrayController : IDisposable
         _version = version;
         _flyout = new FlyoutWindow(companionStore, spriteStore);
 
+        _fallbackFrames = CreateSingleFrame(
+                "egg-fallback",
+                new GeneratedIconSource
+                {
+                    Text = "🥚",
+                    FontFamily = new FontFamily("Segoe UI Emoji"),
+                    FontSize = 40,
+                    Background = Brushes.Transparent,
+                })
+            ?? new TrayIconFrames(
+                "egg-fallback",
+                new OwnedTrayIcon(
+                    (DrawingIcon)System.Drawing.SystemIcons.Application.Clone()));
+        _activeFrames = _fallbackFrames;
+
         _trayIcon = new TaskbarIcon
         {
             ToolTipText = $"PokeTokenBar — {new L(_companionStore.State.Language).TokenEgg} · —",
-            IconSource = _eggIcon,
+            Icon = _fallbackFrames.Low,
             TrayToolTip = BuildCustomTooltip(),
             ContextMenu = BuildContextMenu(),
         };
@@ -80,9 +93,14 @@ internal sealed class TrayController : IDisposable
         _animationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _animationTimer.Tick += (_, _) =>
         {
-            if (_spriteFrames is not { } frames) return;
+            if (_disposed || _activeFrames is not { } frames ||
+                ReferenceEquals(frames.Low, frames.High))
+            {
+                return;
+            }
+
             _highFrame = !_highFrame;
-            _trayIcon.IconSource = _highFrame ? frames.High : frames.Low;
+            TrySetTrayIcon(_highFrame ? frames.High : frames.Low);
         };
     }
 
@@ -109,6 +127,8 @@ internal sealed class TrayController : IDisposable
 
     public void Dispose()
     {
+        _disposed = true;
+        Interlocked.Increment(ref _iconRequestId);
         _usageStore.Changed -= UsageStore_OnChanged;
         _usageStore.LimitAlertsRaised -= UsageStore_OnLimitAlertsRaised;
         _companionStore.Changed -= CompanionStore_OnChanged;
@@ -118,6 +138,19 @@ internal sealed class TrayController : IDisposable
         _flyout.CloseForShutdown();
         _settingsWindow?.Close();
         _trayIcon.Dispose();
+        if (_activeFrames is not null && !ReferenceEquals(_activeFrames, _fallbackFrames))
+        {
+            _activeFrames.Dispose();
+        }
+        _fallbackFrames.Dispose();
+    }
+
+    internal void RecoverTrayIcon()
+    {
+        if (!_disposed)
+        {
+            TrySetTrayIcon((_activeFrames ?? _fallbackFrames).Low);
+        }
     }
 
     private ContextMenu BuildContextMenu()
@@ -377,14 +410,15 @@ internal sealed class TrayController : IDisposable
 
     private async Task UpdateTrayIconAsync()
     {
+        string key;
+        Func<Task<TrayIconFrames?>> render;
         if (!string.IsNullOrWhiteSpace(_settings.NumericTrayIcon))
         {
-            _spriteFrames = null;
             var value = NumericIconText(_settings.NumericTrayIcon);
-            var numericKey = $"{_settings.NumericTrayIcon}:{value}";
-            if (_numericIcon is not { } cached || cached.Key != numericKey)
-            {
-                cached = (numericKey, new GeneratedIconSource
+            key = $"numeric:{_settings.NumericTrayIcon}:{value}";
+            render = () => Task.FromResult(CreateSingleFrame(
+                key,
+                new GeneratedIconSource
                 {
                     Text = value,
                     FontFamily = new FontFamily("Segoe UI"),
@@ -393,64 +427,63 @@ internal sealed class TrayController : IDisposable
                     Foreground = Brushes.White,
                     Background = new SolidColorBrush(Color.FromRgb(31, 72, 52)),
                     Margin = new Thickness(1),
-                });
-                _numericIcon = cached;
-            }
+                }));
+        }
+        else if (_companionStore.CurrentSpeciesID is not { } speciesId)
+        {
+            key = "egg";
+            render = async () =>
+            {
+                var data = await _spriteStore.GetEggAsync();
+                var path = data is null ? null : _spriteStore.FindCachedEggPath();
+                return path is null ? null : CreateSpriteFrames(key, path);
+            };
+        }
+        else
+        {
+            var shiny = _companionStore.CurrentIsShiny;
+            key = $"species:{speciesId}:{shiny}";
+            render = async () =>
+            {
+                var data = await _spriteStore.GetSpeciesAsync(
+                    speciesId,
+                    animated: false,
+                    shiny);
+                var path = data is null
+                    ? null
+                    : _spriteStore.FindCachedSpeciesPath(
+                        speciesId,
+                        animated: false,
+                        shiny);
+                return path is null ? null : CreateSpriteFrames(key, path);
+            };
+        }
 
-            _trayIcon.IconSource = cached.Source;
+        if (_activeFrames?.Key == key || _pendingIconKey == key || _disposed)
+        {
             return;
         }
 
-        _numericIcon = null;
-        if (_companionStore.CurrentSpeciesID is not { } speciesId)
+        var request = Interlocked.Increment(ref _iconRequestId);
+        _pendingIconKey = key;
+        TrayIconFrames? frames = null;
+        try
         {
-            _spriteFrames = null;
-            _trayIcon.IconSource = _eggIcon;
+            frames = await render();
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"tray icon render failed for {key}: {exception.Message}");
+        }
+
+        if (_disposed || request != _iconRequestId || _pendingIconKey != key)
+        {
+            frames?.Dispose();
             return;
         }
 
-        var key = $"{speciesId}:{_companionStore.CurrentIsShiny}";
-        if (_spriteFrames is { } existing && existing.Key == key)
-        {
-            return;
-        }
-
-        var data = await _spriteStore.GetSpeciesAsync(
-            speciesId,
-            animated: false,
-            _companionStore.CurrentIsShiny);
-        if (data is null)
-        {
-            return;
-        }
-
-        var cachedPath = _spriteStore.FindCachedSpeciesPath(
-            speciesId,
-            animated: false,
-            _companionStore.CurrentIsShiny);
-        if (cachedPath is null)
-        {
-            return;
-        }
-
-        var image = new BitmapImage(new Uri(cachedPath, UriKind.Absolute));
-        image.Freeze();
-        var low = new GeneratedIconSource
-        {
-            Text = string.Empty,
-            Background = Brushes.Transparent,
-            BackgroundSource = image,
-            Margin = new Thickness(5, 5, 5, 2),
-        };
-        var high = new GeneratedIconSource
-        {
-            Text = string.Empty,
-            Background = Brushes.Transparent,
-            BackgroundSource = image,
-            Margin = new Thickness(5, 2, 5, 5),
-        };
-        _spriteFrames = (key, low, high);
-        _trayIcon.IconSource = low;
+        _pendingIconKey = null;
+        SetActiveFrames(frames ?? _fallbackFrames);
     }
 
     private string NumericIconText(string kind) => kind switch
@@ -461,4 +494,155 @@ internal sealed class TrayController : IDisposable
             : "—",
         _ => TokenFormatter.Compact(_usageStore.TodayTotalTokens),
     };
+
+    private void SetActiveFrames(TrayIconFrames frames)
+    {
+        var previous = _activeFrames;
+        if (!TrySetTrayIcon(frames.Low))
+        {
+            if (!ReferenceEquals(frames, previous) &&
+                !ReferenceEquals(frames, _fallbackFrames))
+            {
+                frames.Dispose();
+            }
+            return;
+        }
+
+        _activeFrames = frames;
+        _highFrame = false;
+        if (previous is not null &&
+            !ReferenceEquals(previous, frames) &&
+            !ReferenceEquals(previous, _fallbackFrames))
+        {
+            previous.Dispose();
+        }
+    }
+
+    private bool TrySetTrayIcon(DrawingIcon icon)
+    {
+        try
+        {
+            _trayIcon.Icon = icon;
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is ExternalException or InvalidOperationException)
+        {
+            AppLog.Write($"tray icon update recovered: {exception.Message}");
+            return false;
+        }
+    }
+
+    private static TrayIconFrames? CreateSingleFrame(string key, GeneratedIconSource source)
+    {
+        var icon = RenderIcon(source, key);
+        return icon is null ? null : new TrayIconFrames(key, icon);
+    }
+
+    private static TrayIconFrames? CreateSpriteFrames(string key, string path)
+    {
+        var image = new BitmapImage(new Uri(path, UriKind.Absolute));
+        image.Freeze();
+        var low = RenderIcon(new GeneratedIconSource
+        {
+            Text = string.Empty,
+            Background = Brushes.Transparent,
+            BackgroundSource = image,
+            Margin = new Thickness(5, 5, 5, 2),
+        }, key + ":low");
+        if (low is null)
+        {
+            return null;
+        }
+
+        var high = RenderIcon(new GeneratedIconSource
+        {
+            Text = string.Empty,
+            Background = Brushes.Transparent,
+            BackgroundSource = image,
+            Margin = new Thickness(5, 2, 5, 5),
+        }, key + ":high");
+        if (high is null)
+        {
+            low.Dispose();
+            return null;
+        }
+
+        return new TrayIconFrames(key, low, high);
+    }
+
+    private static OwnedTrayIcon? RenderIcon(GeneratedIconSource source, string key)
+    {
+        try
+        {
+            var icon = source.ToIcon();
+            return new OwnedTrayIcon(icon, icon.Handle);
+        }
+        catch (Exception exception) when (
+            exception is ExternalException or InvalidOperationException or ArgumentException)
+        {
+            AppLog.Write($"tray icon generation recovered for {key}: {exception.Message}");
+            return null;
+        }
+    }
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(nint iconHandle);
+
+    private sealed class TrayIconFrames : IDisposable
+    {
+        private readonly OwnedTrayIcon _low;
+        private readonly OwnedTrayIcon _high;
+
+        public TrayIconFrames(string key, OwnedTrayIcon icon) : this(key, icon, icon)
+        {
+        }
+
+        public TrayIconFrames(string key, OwnedTrayIcon low, OwnedTrayIcon high)
+        {
+            Key = key;
+            _low = low;
+            _high = high;
+        }
+
+        public string Key { get; }
+
+        public DrawingIcon Low => _low.Icon;
+
+        public DrawingIcon High => _high.Icon;
+
+        public void Dispose()
+        {
+            _low.Dispose();
+            if (!ReferenceEquals(_low, _high))
+            {
+                _high.Dispose();
+            }
+        }
+    }
+
+    private sealed class OwnedTrayIcon(DrawingIcon icon, nint nativeHandle = 0) : IDisposable
+    {
+        private nint _nativeHandle = nativeHandle;
+        private bool _disposed;
+
+        public DrawingIcon Icon { get; } = icon;
+
+        public void Dispose()
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _disposed = true;
+            Icon.Dispose();
+            if (_nativeHandle != 0)
+            {
+                DestroyIcon(_nativeHandle);
+                _nativeHandle = 0;
+            }
+        }
+    }
 }

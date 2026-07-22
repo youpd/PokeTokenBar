@@ -74,6 +74,13 @@ public sealed class SpriteStore : IDisposable
             .ConfigureAwait(false);
     }
 
+    public Task<byte[]?> GetEggAsync(CancellationToken cancellationToken = default) =>
+        GetOrFetchAsync(
+            "egg",
+            ".png",
+            new Uri($"{PokemonBase}/egg.png"),
+            cancellationToken);
+
     public static string CacheKey(int speciesId, bool animated, bool shiny) =>
         $"{speciesId}-{(shiny ? "sh" : string.Empty)}{(animated ? "a" : "s")}";
 
@@ -85,6 +92,12 @@ public sealed class SpriteStore : IDisposable
         }
 
         return null;
+    }
+
+    public string? FindCachedEggPath()
+    {
+        var path = Path.Combine(_directory, "egg.png");
+        return File.Exists(path) ? Path.GetFullPath(path) : null;
     }
 
     public void Dispose()

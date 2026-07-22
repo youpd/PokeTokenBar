@@ -32,7 +32,9 @@ Usage stays on this computer. The app reads local logs from `%USERPROFILE%\.clau
 and `%USERPROFILE%\.gemini`; extra home directories can be added in Settings. Claude's optional
 official-limit view reads the existing Claude credential file, while Codex limits use
 `codex app-server` without starting a model turn. Pokémon metadata and sprites are fetched from
-PokéAPI at runtime and cached locally; no Pokémon assets are bundled.
+PokéAPI at runtime and cached locally, including the egg sprite; no Pokémon assets are bundled.
+Provider incident checks read Anthropic's status summary and the Codex-specific components on
+OpenAI's status page, so unrelated ChatGPT incidents do not produce a Codex warning.
 
 Application state is stored under `%LOCALAPPDATA%\PokeTokenBar`:
 
@@ -41,8 +43,18 @@ Application state is stored under `%LOCALAPPDATA%\PokeTokenBar`:
 - `sprites\` for runtime-fetched images
 - `logs\app.log` for troubleshooting
 
-Use **Settings → Report a problem** to create a diagnostic email, or **Show logs** to open the log
-directory.
+Use **Settings → Report a problem** to open a prefilled GitHub issue, or **Show logs** to open the log
+directory. Log files are not uploaded or attached automatically.
+
+## Troubleshooting
+
+PokeTokenBar normally runs only in the notification area. If its icon is hidden, first open the
+notification-area overflow menu. If the process has exited, start `PokeTokenBar.exe` again and check
+`%LOCALAPPDATA%\PokeTokenBar\logs\app.log`. Current builds reuse pre-rendered tray icon frames to
+avoid the GDI handle exhaustion that could close earlier Windows builds during long sessions.
+
+The **Launch at login** option starts the app at the next Windows sign-in. It is not a crash watchdog,
+so keep the log when reporting any unexpected exit that still occurs.
 
 ## Run from source
 
