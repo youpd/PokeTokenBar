@@ -66,13 +66,13 @@ public sealed class UpdateCheckerTests
         Assert.Equal("Home", new L(AppLanguage.En).Home);
         Assert.Equal("ホーム", new L(AppLanguage.Ja).Home);
         Assert.Equal(
-            "오늘 1.2M · API 환산 예상비용 $4.40 (구독제 상태)",
+            "오늘 1.2M · API $4.40 (구독)",
             new L(AppLanguage.Ko).CodexTodayProvider(1_200_000, 4.4));
         Assert.Equal(
-            "Today 1.2M · API estimate $4.40 (subscription plan)",
+            "Today 1.2M · API $4.40 (plan)",
             new L(AppLanguage.En).CodexTodayProvider(1_200_000, 4.4));
         Assert.Equal(
-            "今日 1.2M · API換算見積 $4.40（サブスク利用）",
+            "今日 1.2M · API $4.40（定額）",
             new L(AppLanguage.Ja).CodexTodayProvider(1_200_000, 4.4));
 
         var issue = SupportIssue.Build("0.1.0+test", "Windows Test + x64");

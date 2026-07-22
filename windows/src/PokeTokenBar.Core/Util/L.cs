@@ -17,7 +17,7 @@ public readonly record struct L(AppLanguage Language)
     public string Bag => T("가방", "Bag", "バッグ");
     public string Collection => T("컬렉션", "Collection", "コレクション");
     public string Today => T("오늘", "Today", "今日");
-    public string Cost => T("API 환산 예상비용", "API-equivalent estimate", "API換算見積");
+    public string Cost => T("API 예상비용", "API estimate", "API見積");
     public string Week => T("이번 주", "This week", "今週");
     public string Month => T("이번 달", "This month", "今月");
     public string Providers => T("프로바이더", "Providers", "プロバイダー");
@@ -52,9 +52,9 @@ public readonly record struct L(AppLanguage Language)
         $"Today {TokenFormatter.Compact(amount)} · {TokenFormatter.Cost(cost)}",
         $"今日 {TokenFormatter.Compact(amount)} · {TokenFormatter.Cost(cost)}");
     public string CodexTodayProvider(long amount, double cost) => T(
-        $"오늘 {TokenFormatter.Compact(amount)} · API 환산 예상비용 {TokenFormatter.Cost(cost)} (구독제 상태)",
-        $"Today {TokenFormatter.Compact(amount)} · API estimate {TokenFormatter.Cost(cost)} (subscription plan)",
-        $"今日 {TokenFormatter.Compact(amount)} · API換算見積 {TokenFormatter.Cost(cost)}（サブスク利用）");
+        $"오늘 {TokenFormatter.Compact(amount)} · API {TokenFormatter.Cost(cost)} (구독)",
+        $"Today {TokenFormatter.Compact(amount)} · API {TokenFormatter.Cost(cost)} (plan)",
+        $"今日 {TokenFormatter.Compact(amount)} · API {TokenFormatter.Cost(cost)}（定額）");
     public string PerMinute(long amount) => T(
         $"{TokenFormatter.Compact(amount)}/분",
         $"{TokenFormatter.Compact(amount)}/min",
