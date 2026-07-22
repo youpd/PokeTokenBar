@@ -29,6 +29,8 @@ public readonly record struct L(AppLanguage Language)
     public string NoActiveBlock => T("활성 블록 없음", "No active block", "アクティブなブロックなし");
     public string Refreshing => T("사용량 불러오는 중…", "Loading usage…", "使用量を読み込み中…");
     public string RefreshNow => T("지금 새로고침", "Refresh now", "今すぐ更新");
+    public string PinFlyout => T("창 고정", "Pin window", "ウィンドウを固定");
+    public string UnpinFlyout => T("창 고정 해제", "Unpin window", "固定を解除");
     public string Open => T("열기", "Open", "開く");
     public string Settings => T("설정", "Settings", "設定");
     public string Quit => T("종료", "Quit", "終了");

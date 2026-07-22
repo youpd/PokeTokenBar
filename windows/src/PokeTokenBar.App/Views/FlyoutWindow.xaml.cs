@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -51,7 +52,7 @@ public partial class FlyoutWindow : Window
         _bobTimer.Start();
         Deactivated += (_, _) =>
         {
-            if (!_keepOpenWhenDeactivated)
+            if (!_keepOpenWhenDeactivated && PinButton.IsChecked != true)
             {
                 Hide();
             }
@@ -149,6 +150,7 @@ public partial class FlyoutWindow : Window
         LimitSectionTitle.Text = text.OfficialLimits;
         ReloadClaudeLimitsButton.Content = text.Reload;
         WalletLabel.Text = text.Wallet;
+        UpdatePinButtonText();
         RefreshButton.ToolTip = text.RefreshNow;
         UpdateBanner.Visibility = _availableUpdate is null
             ? Visibility.Collapsed
@@ -763,6 +765,16 @@ public partial class FlyoutWindow : Window
         {
             RefreshButton.IsEnabled = true;
         }
+    }
+
+    private void PinButton_OnClick(object sender, RoutedEventArgs e) =>
+        UpdatePinButtonText();
+
+    private void UpdatePinButtonText()
+    {
+        var label = PinButton.IsChecked == true ? Text.UnpinFlyout : Text.PinFlyout;
+        PinButton.ToolTip = label;
+        AutomationProperties.SetName(PinButton, label);
     }
 
     private async void ReloadClaudeLimitsButton_OnClick(object sender, RoutedEventArgs e)

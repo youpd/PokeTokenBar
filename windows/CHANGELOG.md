@@ -4,6 +4,10 @@ All notable changes to the Windows port are documented in this file.
 
 ## Unreleased
 
+### Added
+
+- Add a header pin toggle that keeps the flyout visible when another window receives focus.
+
 ### Changed
 
 - Show Codex model usage as an API-equivalent cost estimate with the compact `API $… (subscription)`

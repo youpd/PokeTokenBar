@@ -14,6 +14,10 @@ separate .NET installation is not required.
 3. Run `PokeTokenBar.exe`. The app appears in the notification area instead of the taskbar.
 4. Open Settings from the tray menu to enable launch at login or change language and display options.
 
+Click the notification-area icon to open the flyout. Use the pin button beside refresh to keep the
+flyout visible while working in another window; click it again to restore automatic closing when the
+flyout loses focus. The pin state lasts for the current app session.
+
 The first unsigned release may show a Microsoft Defender SmartScreen warning. Review the publisher
 and release checksum before choosing **More info → Run anyway**. The SHA-256 checksum is distributed
 beside every release archive.

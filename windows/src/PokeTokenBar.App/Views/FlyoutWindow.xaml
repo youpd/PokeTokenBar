@@ -36,36 +36,77 @@
                     <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="PokeTokenBar" />
                     <TextBlock x:Name="SubtitleText" Foreground="{DynamicResource SecondaryTextBrush}" Text="AI usage companion" />
                 </StackPanel>
-                <Button
-                    x:Name="RefreshButton"
-                    Grid.Column="1"
-                    Width="36"
-                    Height="30"
-                    Background="#FF2A2E36"
-                    BorderBrush="#FF4B5565"
-                    Click="RefreshButton_OnClick"
-                    FontSize="18"
-                    Foreground="{DynamicResource PrimaryTextBrush}"
-                    ToolTip="지금 새로고침">
-                    <Button.Template>
-                        <ControlTemplate TargetType="Button">
-                            <Border
-                                x:Name="RefreshBorder"
-                                Background="{TemplateBinding Background}"
-                                BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="1"
-                                CornerRadius="7">
-                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
-                            </Border>
-                            <ControlTemplate.Triggers>
-                                <Trigger Property="IsMouseOver" Value="True">
-                                    <Setter TargetName="RefreshBorder" Property="Background" Value="#FF355F4A" />
-                                </Trigger>
-                            </ControlTemplate.Triggers>
-                        </ControlTemplate>
-                    </Button.Template>
-                    <TextBlock FontFamily="Segoe UI Symbol" Text="↻" />
-                </Button>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <ToggleButton
+                        x:Name="PinButton"
+                        Width="36"
+                        Height="30"
+                        Margin="0,0,6,0"
+                        Background="#FF2A2E36"
+                        BorderBrush="#FF4B5565"
+                        Click="PinButton_OnClick"
+                        Foreground="{DynamicResource PrimaryTextBrush}"
+                        ToolTip="창 고정">
+                        <ToggleButton.Template>
+                            <ControlTemplate TargetType="ToggleButton">
+                                <Border
+                                    x:Name="PinBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="PinBorder" Property="Background" Value="#FF355F4A" />
+                                    </Trigger>
+                                    <Trigger Property="IsChecked" Value="True">
+                                        <Setter TargetName="PinBorder" Property="Background" Value="#FF357A58" />
+                                        <Setter TargetName="PinBorder" Property="BorderBrush" Value="#FF72E6AC" />
+                                        <Setter Property="Foreground" Value="White" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </ToggleButton.Template>
+                        <Viewbox Width="16" Height="16">
+                            <Canvas Width="20" Height="20">
+                                <Path
+                                    Data="M7,1 L13,1 L13,3 L12,4 L12,8 L15,11 L15,13 L10.8,13 L10,19 L9,19 L8.2,13 L4,13 L4,11 L7,8 L7,4 L6,3 L6,1 Z"
+                                    Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=ToggleButton}}" />
+                            </Canvas>
+                        </Viewbox>
+                    </ToggleButton>
+                    <Button
+                        x:Name="RefreshButton"
+                        Width="36"
+                        Height="30"
+                        Background="#FF2A2E36"
+                        BorderBrush="#FF4B5565"
+                        Click="RefreshButton_OnClick"
+                        FontSize="18"
+                        Foreground="{DynamicResource PrimaryTextBrush}"
+                        ToolTip="지금 새로고침">
+                        <Button.Template>
+                            <ControlTemplate TargetType="Button">
+                                <Border
+                                    x:Name="RefreshBorder"
+                                    Background="{TemplateBinding Background}"
+                                    BorderBrush="{TemplateBinding BorderBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="7">
+                                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                </Border>
+                                <ControlTemplate.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter TargetName="RefreshBorder" Property="Background" Value="#FF355F4A" />
+                                    </Trigger>
+                                </ControlTemplate.Triggers>
+                            </ControlTemplate>
+                        </Button.Template>
+                        <TextBlock FontFamily="Segoe UI Symbol" Text="↻" />
+                    </Button>
+                </StackPanel>
             </Grid>
 
             <TabControl Grid.Row="1" Margin="0,12,0,0" Background="Transparent" BorderThickness="0">
