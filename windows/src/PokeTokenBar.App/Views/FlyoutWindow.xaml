@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PokeTokenBar"
     Width="420"
-    Height="650"
+    Height="800"
     AllowsTransparency="True"
     Background="Transparent"
     ResizeMode="NoResize"
@@ -25,6 +25,8 @@
 
         <Grid>
             <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="Auto" />
@@ -242,6 +244,22 @@
 
             <Border
                 Grid.Row="6"
+                x:Name="StatusBanner"
+                Margin="0,10,0,0"
+                Padding="12,9"
+                Background="#443B2C16"
+                BorderBrush="#FFB7791F"
+                BorderThickness="1"
+                CornerRadius="9"
+                Visibility="Collapsed">
+                <TextBlock
+                    x:Name="StatusBannerText"
+                    Foreground="#FFFFD28A"
+                    TextWrapping="Wrap" />
+            </Border>
+
+            <Border
+                Grid.Row="7"
                 Margin="0,10,0,0"
                 Padding="14"
                 Background="{StaticResource CardBackgroundBrush}"
@@ -270,9 +288,46 @@
                 </Grid>
             </Border>
 
+            <Border
+                x:Name="LimitSectionBorder"
+                Grid.Row="8"
+                Margin="0,10,0,0"
+                Padding="14"
+                Background="{StaticResource CardBackgroundBrush}"
+                CornerRadius="12"
+                Visibility="Collapsed">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="LimitSectionTitle"
+                            FontWeight="SemiBold"
+                            Foreground="{StaticResource PrimaryTextBrush}"
+                            Text="공식 한도" />
+                        <Button
+                            x:Name="ReloadClaudeLimitsButton"
+                            Grid.Column="1"
+                            Padding="8,3"
+                            Click="ReloadClaudeLimitsButton_OnClick"
+                            Content="다시 읽기"
+                            Visibility="Collapsed" />
+                    </Grid>
+                    <TextBlock
+                        x:Name="LimitSectionMessage"
+                        Margin="0,6,0,0"
+                        Foreground="{StaticResource SecondaryTextBrush}"
+                        TextWrapping="Wrap"
+                        Visibility="Collapsed" />
+                    <StackPanel x:Name="LimitRowsPanel" Margin="0,7,0,0" />
+                </StackPanel>
+            </Border>
+
             <TextBlock
                 x:Name="RefreshStatusText"
-                Grid.Row="7"
+                Grid.Row="9"
                 Margin="2,14,2,0"
                 VerticalAlignment="Bottom"
                 Foreground="{StaticResource SecondaryTextBrush}"

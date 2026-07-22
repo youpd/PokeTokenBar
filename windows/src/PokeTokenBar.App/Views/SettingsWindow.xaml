@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PokeTokenBar 설정"
     Width="380"
-    Height="390"
+    Height="600"
     Background="{StaticResource WindowBackgroundBrush}"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
@@ -62,6 +62,44 @@
                 <ComboBoxItem Tag="300">5분</ComboBoxItem>
                 <ComboBoxItem Tag="900">15분</ComboBoxItem>
             </ComboBox>
+        </StackPanel>
+
+        <StackPanel Grid.Row="4" Margin="0,18,0,0">
+            <CheckBox
+                x:Name="LimitNotificationsCheckBox"
+                Margin="0,0,0,9"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="한도 경고 알림" />
+            <CheckBox
+                x:Name="StatusChecksCheckBox"
+                Margin="0,0,0,9"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="프로바이더 상태 확인" />
+            <CheckBox
+                x:Name="DisableClaudeLimitsCheckBox"
+                Margin="0,0,0,10"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="Claude 공식 한도 조회 끄기" />
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="65" />
+                    <ColumnDefinition Width="12" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="65" />
+                </Grid.ColumnDefinitions>
+                <TextBlock VerticalAlignment="Center" Foreground="{StaticResource PrimaryTextBrush}" Text="경고 %" />
+                <TextBox x:Name="WarnThresholdTextBox" Grid.Column="1" />
+                <TextBlock Grid.Column="3" VerticalAlignment="Center" Foreground="{StaticResource PrimaryTextBrush}" Text="위험 %" />
+                <TextBox x:Name="CritThresholdTextBox" Grid.Column="4" />
+            </Grid>
+            <TextBlock Margin="0,0,0,5" Foreground="{StaticResource PrimaryTextBrush}" Text="Codex 실행 파일(선택)" />
+            <TextBox x:Name="CodexPathTextBox" Margin="0,0,0,10" />
+            <Button
+                Width="150"
+                HorizontalAlignment="Left"
+                Click="ReloadClaudeLimitsButton_OnClick"
+                Content="Claude 토큰 다시 읽기" />
         </StackPanel>
 
         <StackPanel

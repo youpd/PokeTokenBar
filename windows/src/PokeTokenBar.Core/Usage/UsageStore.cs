@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using PokeTokenBar.Core.Limits;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Util;
 
@@ -17,7 +18,14 @@ public sealed class UsageStore : IDisposable
     private readonly Func<DateTimeOffset> _clock;
     private readonly TimeZoneInfo _timeZone;
     private readonly string? _snapshotFile;
+    private readonly AppSettings? _settings;
+    private readonly IClaudeLimitsProvider? _claudeLimitsProvider;
+    private readonly ICodexLimitsProvider? _codexLimitsProvider;
+    private readonly IProviderStatusProvider? _statusProvider;
+    private readonly Dictionary<string, int> _limitAlertTiers = new(StringComparer.Ordinal);
     private IReadOnlyList<ProviderSnapshot> _snapshots = [];
+    private IReadOnlyDictionary<string, ProviderStatus> _providerStatuses =
+        new Dictionary<string, ProviderStatus>(StringComparer.Ordinal);
     private CancellationTokenSource? _emptyRetryCancellation;
     private int _refreshing;
     private bool _disposed;
@@ -26,7 +34,11 @@ public sealed class UsageStore : IDisposable
         IEnumerable<IUsageProvider> providers,
         Func<DateTimeOffset>? clock = null,
         TimeZoneInfo? timeZone = null,
-        string? snapshotFile = null)
+        string? snapshotFile = null,
+        AppSettings? settings = null,
+        IClaudeLimitsProvider? claudeLimitsProvider = null,
+        ICodexLimitsProvider? codexLimitsProvider = null,
+        IProviderStatusProvider? statusProvider = null)
     {
         ArgumentNullException.ThrowIfNull(providers);
         _providers = providers.ToArray();
@@ -43,9 +55,15 @@ public sealed class UsageStore : IDisposable
         _clock = clock ?? (() => DateTimeOffset.Now);
         _timeZone = timeZone ?? TimeZoneInfo.Local;
         _snapshotFile = snapshotFile;
+        _settings = settings;
+        _claudeLimitsProvider = claudeLimitsProvider;
+        _codexLimitsProvider = codexLimitsProvider;
+        _statusProvider = statusProvider;
     }
 
     public event EventHandler? Changed;
+
+    public event Action<IReadOnlyList<LimitAlert>>? LimitAlertsRaised;
 
     public IReadOnlyList<ProviderSnapshot> Snapshots => _snapshots;
 
@@ -53,6 +71,20 @@ public sealed class UsageStore : IDisposable
         _providers.Select(provider => provider.Id).ToArray();
 
     public DateTimeOffset? LastUpdated { get; private set; }
+
+    public ClaudeLimitStatus? ClaudeLimits { get; private set; }
+
+    public CodexRateLimitsResult? CodexLimits { get; private set; }
+
+    public IReadOnlyDictionary<string, ProviderStatus> ProviderStatuses => _providerStatuses;
+
+    public DateTimeOffset? ClaudeLimitsUpdatedAt { get; private set; }
+
+    public DateTimeOffset? CodexLimitsUpdatedAt { get; private set; }
+
+    public bool ClaudeLimitsAuthExpired { get; private set; }
+
+    public DateTimeOffset? ClaudeLimitsBackoffUntil { get; private set; }
 
     public string? LastErrorDescription { get; private set; }
 
@@ -106,6 +138,43 @@ public sealed class UsageStore : IDisposable
     public BlockUsage? ClaudeActiveBlock =>
         _snapshots.FirstOrDefault(snapshot => snapshot.ProviderId == "claude_code")?
             .ActiveBlock;
+
+    public FiveHourForecast? FiveHourForecast =>
+        LimitLogic.Forecast(ClaudeLimits, ClaudeActiveBlock, _clock());
+
+    public bool AreClaudeLimitsStale => IsLimitDataStale(ClaudeLimitsUpdatedAt);
+
+    public bool AreCodexLimitsStale => IsLimitDataStale(CodexLimitsUpdatedAt);
+
+    public bool IsLimitWarning
+    {
+        get
+        {
+            var critical = _settings?.CritThreshold ?? 95;
+            return LimitLogic.BuildReadings(ClaudeLimits, CodexLimits)
+                       .Any(reading => reading.Utilization >= critical) ||
+                   FiveHourForecast?.BeforeReset == true;
+        }
+    }
+
+    public string? MenuLimitLine
+    {
+        get
+        {
+            var values = new List<string>(2);
+            if (UsedToday("claude_code") && ClaudeLimits?.FiveHour?.Utilization is { } claude)
+            {
+                values.Add($"Claude {TokenFormatter.Percent(claude)}");
+            }
+
+            if (UsedToday("codex") && CodexLimits?.MaxPrimaryUsedPercent is { } codex)
+            {
+                values.Add($"Codex {TokenFormatter.Percent(codex)}");
+            }
+
+            return values.Count == 0 ? null : string.Join(" · ", values);
+        }
+    }
 
     public string TodayKey => LocalUsageReader.TodayKey(_clock(), _timeZone);
 
@@ -298,6 +367,8 @@ public sealed class UsageStore : IDisposable
             }
 
             _snapshots = enriched;
+            await RefreshLimitsAndStatusAsync(cancellationToken).ConfigureAwait(true);
+            RaiseLimitAlerts();
             WriteParitySnapshot();
             AppLog.Write(
                 $"usage refresh complete: today={TodayTotalTokens}, providers={_snapshots.Count}, " +
@@ -326,12 +397,163 @@ public sealed class UsageStore : IDisposable
         CancelEmptyRetry();
     }
 
+    public async Task RefreshClaudeLimitsFromCredentialAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (_claudeLimitsProvider is null || _settings?.ClaudeLimitsDisabled == true)
+        {
+            return;
+        }
+
+        try
+        {
+            ClaudeLimits = await _claudeLimitsProvider.FetchAsync(
+                    forceCredentialReload: true,
+                    cancellationToken)
+                .ConfigureAwait(false);
+            ClaudeLimitsUpdatedAt = _clock();
+            ClaudeLimitsAuthExpired = false;
+            ClaudeLimitsBackoffUntil = null;
+        }
+        catch (ClaudeLimitsException exception)
+        {
+            ClaudeLimitsAuthExpired = exception.IsAuthenticationExpired;
+            ClaudeLimitsBackoffUntil = exception.RetryAfter is { } retry
+                ? _clock().Add(retry)
+                : null;
+            AppLog.Write($"Claude limits manual refresh failed: {exception.Message}");
+        }
+        finally
+        {
+            Changed?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
     private void ScheduleEmptyRetry()
     {
         var cancellation = new CancellationTokenSource();
         _emptyRetryCancellation = cancellation;
         _ = RetryEmptyUsageAsync(cancellation);
         AppLog.Write("empty usage retry scheduled");
+    }
+
+    private async Task RefreshLimitsAndStatusAsync(CancellationToken cancellationToken)
+    {
+        if (_claudeLimitsProvider is not null)
+        {
+            if (_settings?.ClaudeLimitsDisabled == true)
+            {
+                ClaudeLimits = null;
+                ClaudeLimitsUpdatedAt = null;
+                ClaudeLimitsAuthExpired = false;
+                ClaudeLimitsBackoffUntil = null;
+            }
+            else
+            {
+                try
+                {
+                    ClaudeLimits = await _claudeLimitsProvider.FetchAsync(
+                            cancellationToken: cancellationToken)
+                        .ConfigureAwait(true);
+                    ClaudeLimitsUpdatedAt = _clock();
+                    ClaudeLimitsAuthExpired = false;
+                    ClaudeLimitsBackoffUntil = null;
+                    AppLog.Write("Claude limits refresh complete");
+                }
+                catch (ClaudeLimitsException exception)
+                {
+                    ClaudeLimitsAuthExpired = exception.IsAuthenticationExpired;
+                    ClaudeLimitsBackoffUntil = exception.RetryAfter is { } retry
+                        ? _clock().Add(retry)
+                        : null;
+                    AppLog.Write($"Claude limits refresh failed: {exception.Message}");
+                }
+                catch (Exception exception) when (
+                    exception is not OperationCanceledException ||
+                    !cancellationToken.IsCancellationRequested)
+                {
+                    AppLog.Write($"Claude limits refresh failed: {exception.Message}");
+                }
+            }
+        }
+
+        if (_codexLimitsProvider is not null)
+        {
+            try
+            {
+                var result = await _codexLimitsProvider.FetchAsync(cancellationToken)
+                    .ConfigureAwait(true);
+                CodexLimits = result;
+                CodexLimitsUpdatedAt = result is null ? null : _clock();
+                AppLog.Write(result is null
+                    ? "Codex limits unavailable: binary not found"
+                    : "Codex limits refresh complete");
+            }
+            catch (Exception exception) when (
+                exception is not OperationCanceledException ||
+                !cancellationToken.IsCancellationRequested)
+            {
+                AppLog.Write($"Codex limits refresh failed: {exception.Message}");
+            }
+        }
+
+        if (_statusProvider is not null)
+        {
+            if (_settings?.StatusChecksEnabled == false)
+            {
+                _providerStatuses = new Dictionary<string, ProviderStatus>(StringComparer.Ordinal);
+            }
+            else
+            {
+                try
+                {
+                    var fetched = await _statusProvider.FetchAsync(cancellationToken)
+                        .ConfigureAwait(true);
+                    var merged = new Dictionary<string, ProviderStatus>(
+                        _providerStatuses,
+                        StringComparer.Ordinal);
+                    foreach (var pair in fetched)
+                    {
+                        merged[pair.Key] = pair.Value;
+                    }
+
+                    _providerStatuses = merged;
+                }
+                catch (Exception exception) when (
+                    exception is not OperationCanceledException ||
+                    !cancellationToken.IsCancellationRequested)
+                {
+                    AppLog.Write($"provider status refresh failed: {exception.Message}");
+                }
+            }
+        }
+    }
+
+    private void RaiseLimitAlerts()
+    {
+        var alerts = LimitLogic.EvaluateLimitAlerts(
+            LimitLogic.BuildReadings(ClaudeLimits, CodexLimits),
+            _settings?.WarnThreshold ?? 80,
+            _settings?.CritThreshold ?? 95,
+            _limitAlertTiers);
+        if (alerts.Count != 0 &&
+            _settings?.LimitNotifications != false &&
+            AppEnv.IsRealApp)
+        {
+            LimitAlertsRaised?.Invoke(alerts);
+        }
+    }
+
+    private bool IsLimitDataStale(DateTimeOffset? updatedAt) =>
+        updatedAt is null || _clock() - updatedAt > TimeSpan.FromMinutes(15);
+
+    private bool UsedToday(string providerId)
+    {
+        var today = TodayKey;
+        return _snapshots.Any(snapshot =>
+            snapshot.ProviderId == providerId &&
+            snapshot.Today?.Date == today &&
+            snapshot.Today.TotalTokens > 0);
     }
 
     private async Task RetryEmptyUsageAsync(CancellationTokenSource cancellation)

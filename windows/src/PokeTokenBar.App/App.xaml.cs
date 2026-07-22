@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Threading;
 using PokeTokenBar.App.Platform;
 using PokeTokenBar.App.Tray;
+using PokeTokenBar.Core.Limits;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
@@ -17,6 +18,8 @@ public partial class App : Application
     private AppSettings? _settings;
     private LocalUsageCache? _usageCache;
     private UsageStore? _usageStore;
+    private ClaudeLimitsProvider? _claudeLimitsProvider;
+    private StatuspageProvider? _statusProvider;
     private UsageRefreshCoordinator? _refreshCoordinator;
     private TrayController? _trayController;
     private bool _crashReporterInstalled;
@@ -65,9 +68,18 @@ public partial class App : Application
                 ".gemini",
                 "tmp"),
             paths.UsageCacheFile);
+        _claudeLimitsProvider = new ClaudeLimitsProvider();
+        _statusProvider = new StatuspageProvider();
+        var codexLimitsProvider = new CodexRateLimitsProvider(
+            version,
+            () => _settings.CodexPath);
         _usageStore = new UsageStore(
             UsageProviderRegistry.CreateDefault(_usageCache),
-            snapshotFile: paths.LastSnapshotFile);
+            snapshotFile: paths.LastSnapshotFile,
+            settings: _settings,
+            claudeLimitsProvider: _claudeLimitsProvider,
+            codexLimitsProvider: codexLimitsProvider,
+            statusProvider: _statusProvider);
 
         _trayController = new TrayController(_settings, _settingsStore, _usageStore);
         _refreshCoordinator = new UsageRefreshCoordinator(
@@ -107,6 +119,8 @@ public partial class App : Application
         _usageCache?.Flush();
         _trayController?.Dispose();
         _usageStore?.Dispose();
+        _claudeLimitsProvider?.Dispose();
+        _statusProvider?.Dispose();
 
         if (_settingsStore is not null && _settings is not null)
         {

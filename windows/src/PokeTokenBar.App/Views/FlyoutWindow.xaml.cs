@@ -32,6 +32,8 @@ public partial class FlyoutWindow : Window
 
     public Func<Task>? RefreshRequested { get; set; }
 
+    public Func<Task>? ClaudeLimitsRefreshRequested { get; set; }
+
     public void UpdateDisplay(UsageStore store)
     {
         _lastStore = store;
@@ -52,6 +54,8 @@ public partial class FlyoutWindow : Window
         var selected = store.SnapshotPreferring(_selectedProviderId);
         _selectedProviderId = selected?.ProviderId;
         UpdateProviderDetails(selected);
+        UpdateStatusBanner(store);
+        UpdateLimits(store, selected);
 
         var block = selected?.ActiveBlock;
         BlockTokensText.Text = block is null
@@ -131,6 +135,143 @@ public partial class FlyoutWindow : Window
         SetTokenBreakdown(today);
     }
 
+    private void UpdateStatusBanner(UsageStore store)
+    {
+        var incident = store.ProviderStatuses.Values
+            .Where(status => status.IsIncident)
+            .OrderByDescending(status => status.Indicator)
+            .FirstOrDefault();
+        StatusBanner.Visibility = incident is null ? Visibility.Collapsed : Visibility.Visible;
+        if (incident is not null)
+        {
+            var provider = incident.ProviderId == "claude_code" ? "Claude" : "Codex";
+            StatusBannerText.Text = $"{provider} 상태: {incident.Description}";
+        }
+    }
+
+    private void UpdateLimits(UsageStore store, ProviderSnapshot? selected)
+    {
+        LimitRowsPanel.Children.Clear();
+        ReloadClaudeLimitsButton.Visibility = Visibility.Collapsed;
+        LimitSectionMessage.Visibility = Visibility.Collapsed;
+        var providerId = selected?.ProviderId;
+        if (providerId == "claude_code")
+        {
+            LimitSectionBorder.Visibility = Visibility.Visible;
+            var plan = store.ClaudeLimits?.PlanDisplay;
+            LimitSectionTitle.Text = string.IsNullOrWhiteSpace(plan)
+                ? "Claude 공식 한도"
+                : $"Claude · {plan}";
+            if (store.ClaudeLimitsAuthExpired)
+            {
+                LimitSectionMessage.Text = "Claude Code를 실행하면 인증이 자동 갱신됩니다.";
+                LimitSectionMessage.Visibility = Visibility.Visible;
+                ReloadClaudeLimitsButton.Visibility = Visibility.Visible;
+                return;
+            }
+
+            var limits = store.ClaudeLimits;
+            AddLimitRow("5시간", limits?.FiveHour?.Utilization, limits?.FiveHour?.ResetDate);
+            AddLimitRow("주간", limits?.SevenDay?.Utilization, limits?.SevenDay?.ResetDate);
+            AddLimitRow("주간 Opus", limits?.SevenDayOpus?.Utilization, limits?.SevenDayOpus?.ResetDate);
+            AddLimitRow("주간 Sonnet", limits?.SevenDaySonnet?.Utilization, limits?.SevenDaySonnet?.ResetDate);
+            foreach (var entry in limits?.ScopedLimitEntries ?? [])
+            {
+                AddLimitRow(
+                    entry.DisplayName,
+                    entry.Percent,
+                    DateTimeOffset.TryParse(entry.ResetsAt, out var reset) ? reset : null);
+            }
+
+            if (LimitRowsPanel.Children.Count == 0)
+            {
+                LimitSectionMessage.Text = "공식 한도를 불러오지 못했습니다.";
+                LimitSectionMessage.Visibility = Visibility.Visible;
+                ReloadClaudeLimitsButton.Visibility = Visibility.Visible;
+            }
+            else if (store.AreClaudeLimitsStale)
+            {
+                LimitSectionMessage.Text = "15분 이상 지난 한도 정보입니다.";
+                LimitSectionMessage.Visibility = Visibility.Visible;
+            }
+
+            if (store.FiveHourForecast is { } forecast)
+            {
+                var forecastText = forecast.BeforeReset
+                    ? $"현재 속도면 {forecast.DepletionDate.ToLocalTime():HH:mm}에 소진 예상"
+                    : "현재 속도면 리셋 전 소진되지 않음";
+                LimitSectionMessage.Text = forecastText;
+                LimitSectionMessage.Visibility = Visibility.Visible;
+            }
+
+            return;
+        }
+
+        if (providerId == "codex" && store.CodexLimits is { } codex)
+        {
+            LimitSectionBorder.Visibility = Visibility.Visible;
+            LimitSectionTitle.Text = "Codex 공식 한도";
+            foreach (var snapshot in codex.Snapshots.Where(snapshot => snapshot.IsVisible))
+            {
+                var prefix = codex.Snapshots.Count > 1 ? snapshot.DisplayName + " " : string.Empty;
+                AddLimitRow(prefix + "기본", snapshot.Primary?.UsedPercent, snapshot.Primary?.ResetDate);
+                AddLimitRow(prefix + "보조", snapshot.Secondary?.UsedPercent, snapshot.Secondary?.ResetDate);
+                AddLimitRow(prefix + "개인", snapshot.IndividualLimit?.UsedPercent, snapshot.IndividualLimit?.ResetDate);
+            }
+
+            if (store.AreCodexLimitsStale)
+            {
+                LimitSectionMessage.Text = "15분 이상 지난 한도 정보입니다.";
+                LimitSectionMessage.Visibility = Visibility.Visible;
+            }
+
+            return;
+        }
+
+        LimitSectionBorder.Visibility = Visibility.Collapsed;
+    }
+
+    private void AddLimitRow(string name, double? utilization, DateTimeOffset? reset)
+    {
+        if (utilization is null)
+        {
+            return;
+        }
+
+        var row = new StackPanel { Margin = new Thickness(0, 4, 0, 0) };
+        var label = new Grid();
+        label.ColumnDefinitions.Add(new ColumnDefinition());
+        label.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        label.Children.Add(new TextBlock
+        {
+            Text = name,
+            Foreground = (Brush)FindResource("SecondaryTextBrush"),
+        });
+        var value = new TextBlock
+        {
+            Text = reset is null
+                ? TokenFormatter.Percent(utilization.Value)
+                : $"{TokenFormatter.Percent(utilization.Value)} · {reset.Value.ToLocalTime():M/d HH:mm}",
+            Foreground = utilization >= 95
+                ? ErrorBrush
+                : utilization >= 80
+                    ? Brushes.Goldenrod
+                    : (Brush)FindResource("PrimaryTextBrush"),
+        };
+        Grid.SetColumn(value, 1);
+        label.Children.Add(value);
+        row.Children.Add(label);
+        row.Children.Add(new ProgressBar
+        {
+            Margin = new Thickness(0, 3, 0, 0),
+            Height = 4,
+            Minimum = 0,
+            Maximum = 100,
+            Value = Math.Clamp(utilization.Value, 0, 100),
+        });
+        LimitRowsPanel.Children.Add(row);
+    }
+
     private void SetTokenBreakdown(DailyUsage? usage)
     {
         SetTokenValue(InputTokensText, usage?.InputTokens);
@@ -207,6 +348,24 @@ public partial class FlyoutWindow : Window
         finally
         {
             RefreshButton.IsEnabled = true;
+        }
+    }
+
+    private async void ReloadClaudeLimitsButton_OnClick(object sender, RoutedEventArgs e)
+    {
+        if (ClaudeLimitsRefreshRequested is null)
+        {
+            return;
+        }
+
+        ReloadClaudeLimitsButton.IsEnabled = false;
+        try
+        {
+            await ClaudeLimitsRefreshRequested();
+        }
+        finally
+        {
+            ReloadClaudeLimitsButton.IsEnabled = true;
         }
     }
 }

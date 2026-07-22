@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using H.NotifyIcon;
+using Microsoft.Toolkit.Uwp.Notifications;
 using PokeTokenBar.App.Views;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Usage;
@@ -44,7 +45,10 @@ internal sealed class TrayController : IDisposable
 
         _trayIcon.TrayLeftMouseUp += (_, _) => ToggleFlyout();
         _usageStore.Changed += UsageStore_OnChanged;
+        _usageStore.LimitAlertsRaised += UsageStore_OnLimitAlertsRaised;
         _flyout.RefreshRequested = RequestRefreshAsync;
+        _flyout.ClaudeLimitsRefreshRequested = () =>
+            _usageStore.RefreshClaudeLimitsFromCredentialAsync();
     }
 
     public Func<Task>? RefreshRequested { get; set; }
@@ -68,6 +72,7 @@ internal sealed class TrayController : IDisposable
     public void Dispose()
     {
         _usageStore.Changed -= UsageStore_OnChanged;
+        _usageStore.LimitAlertsRaised -= UsageStore_OnLimitAlertsRaised;
         _flyout.CloseForShutdown();
         _settingsWindow?.Close();
         _trayIcon.Dispose();
@@ -126,7 +131,10 @@ internal sealed class TrayController : IDisposable
             return;
         }
 
-        _settingsWindow = new SettingsWindow(_settings, _settingsStore);
+        _settingsWindow = new SettingsWindow(
+            _settings,
+            _settingsStore,
+            () => _usageStore.RefreshClaudeLimitsFromCredentialAsync());
         _settingsWindow.Saved += (_, _) =>
         {
             UpdatePresentation();
@@ -181,6 +189,25 @@ internal sealed class TrayController : IDisposable
         }
     }
 
+    private static void UsageStore_OnLimitAlertsRaised(IReadOnlyList<LimitAlert> alerts)
+    {
+        foreach (var alert in alerts)
+        {
+            try
+            {
+                new ToastContentBuilder()
+                    .AddArgument("limit", alert.Key)
+                    .AddText(alert.IsCritical ? "한도 위험" : "한도 경고")
+                    .AddText($"{alert.Name} {TokenFormatter.Percent(alert.Utilization)}")
+                    .Show(toast => toast.Tag = alert.Key + (alert.IsCritical ? "-critical" : "-warning"));
+            }
+            catch (Exception exception)
+            {
+                AppLog.Write($"limit toast failed: {exception.Message}");
+            }
+        }
+    }
+
     private void UpdatePresentation()
     {
         const string header = "PokeTokenBar — 알";
@@ -192,7 +219,7 @@ internal sealed class TrayController : IDisposable
             _settings.ShowLimitInMenu,
             _usageStore.TodayTotalTokens,
             _usageStore.TodayCostTotal,
-            limitLine: null);
+            limitLine: _usageStore.MenuLimitLine);
 
         _trayIcon.ToolTipText = TrayText.FallbackText(lines);
         _tooltipContent.Children.Clear();
