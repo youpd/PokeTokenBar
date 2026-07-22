@@ -13,10 +13,13 @@ public sealed class LocalUsageCache
 
     private readonly object _sync = new();
     private readonly IReadOnlyList<string> _claudeRoots;
+    private readonly IReadOnlyList<string> _codexRoots;
+    private readonly IReadOnlyList<string> _geminiRoots;
     private readonly string _cacheFile;
     private readonly Func<DateTimeOffset> _clock;
-    private Dictionary<string, CacheBlob> _claude =
-        new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, CacheBlob> _claude = NewBlobDictionary();
+    private Dictionary<string, CacheBlob> _codex = NewBlobDictionary();
+    private Dictionary<string, CacheBlob> _gemini = NewBlobDictionary();
     private bool _loaded;
     private bool _dirty;
     private DateTimeOffset? _lastSave;
@@ -25,15 +28,25 @@ public sealed class LocalUsageCache
         IEnumerable<string> claudeRoots,
         string cacheFile,
         Func<DateTimeOffset>? clock = null)
+        : this(claudeRoots, [], [], cacheFile, clock)
+    {
+    }
+
+    public LocalUsageCache(
+        IEnumerable<string> claudeRoots,
+        IEnumerable<string> codexRoots,
+        IEnumerable<string> geminiRoots,
+        string cacheFile,
+        Func<DateTimeOffset>? clock = null)
     {
         ArgumentNullException.ThrowIfNull(claudeRoots);
+        ArgumentNullException.ThrowIfNull(codexRoots);
+        ArgumentNullException.ThrowIfNull(geminiRoots);
         ArgumentException.ThrowIfNullOrWhiteSpace(cacheFile);
 
-        _claudeRoots = claudeRoots
-            .Where(root => !string.IsNullOrWhiteSpace(root))
-            .Select(Path.GetFullPath)
-            .Distinct(StringComparer.OrdinalIgnoreCase)
-            .ToArray();
+        _claudeRoots = NormalizeRoots(claudeRoots);
+        _codexRoots = NormalizeRoots(codexRoots);
+        _geminiRoots = NormalizeRoots(geminiRoots);
         _cacheFile = Path.GetFullPath(cacheFile);
         _clock = clock ?? (() => DateTimeOffset.Now);
     }
@@ -45,51 +58,51 @@ public sealed class LocalUsageCache
         lock (_sync)
         {
             EnsureLoaded();
-            var entries = new List<UsageEntry>();
-            var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
-            foreach (var root in _claudeRoots)
-            {
-                foreach (var file in LocalUsageReader.EnumerateJsonlFiles(root, modifiedSince))
-                {
-                    if (!seenFiles.Add(file))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        var info = new FileInfo(file);
-                        var modifiedTicks = info.LastWriteTimeUtc.Ticks;
-                        var size = info.Length;
-                        if (_claude.TryGetValue(file, out var blob) &&
-                            blob.ModifiedUtcTicks == modifiedTicks &&
-                            blob.Size == size)
-                        {
-                            entries.AddRange(blob.Entries);
-                            continue;
-                        }
-
-                        var parsed = LocalUsageReader.ParseClaudeFile(file, timeZone).ToList();
-                        _claude[file] = new CacheBlob
-                        {
-                            ModifiedUtcTicks = modifiedTicks,
-                            Size = size,
-                            Entries = parsed,
-                        };
-                        _dirty = true;
-                        entries.AddRange(parsed);
-                    }
-                    catch (Exception exception) when (
-                        exception is IOException or UnauthorizedAccessException)
-                    {
-                        // A live CLI can rotate a session between enumeration and opening.
-                    }
-                }
-            }
-
-            SaveIfNeeded();
+            var entries = Collect(
+                _claudeRoots,
+                modifiedSince,
+                _claude,
+                allowJson: false,
+                _ => true,
+                file => LocalUsageReader.ParseClaudeFile(file, timeZone));
             return LocalUsageReader.DedupKeepMax(entries);
+        }
+    }
+
+    public IReadOnlyList<UsageEntry> CodexEntries(
+        DateTimeOffset modifiedSince,
+        TimeZoneInfo? timeZone = null)
+    {
+        lock (_sync)
+        {
+            EnsureLoaded();
+            return Collect(
+                _codexRoots,
+                modifiedSince,
+                _codex,
+                allowJson: false,
+                file => Path.GetFileName(file).StartsWith("rollout-", StringComparison.OrdinalIgnoreCase),
+                file => LocalUsageReader.ParseCodexFile(file, timeZone));
+        }
+    }
+
+    public IReadOnlyList<UsageEntry> GeminiEntries(
+        DateTimeOffset modifiedSince,
+        TimeZoneInfo? timeZone = null)
+    {
+        lock (_sync)
+        {
+            EnsureLoaded();
+            return Collect(
+                _geminiRoots,
+                modifiedSince,
+                _gemini,
+                allowJson: true,
+                file => string.Equals(
+                    Directory.GetParent(file)?.Name,
+                    "chats",
+                    StringComparison.OrdinalIgnoreCase),
+                file => LocalUsageReader.ParseGeminiFile(file, timeZone));
         }
     }
 
@@ -100,6 +113,65 @@ public sealed class LocalUsageCache
             EnsureLoaded();
             SaveIfNeeded(force: true);
         }
+    }
+
+    private IReadOnlyList<UsageEntry> Collect(
+        IEnumerable<string> roots,
+        DateTimeOffset modifiedSince,
+        IDictionary<string, CacheBlob> cache,
+        bool allowJson,
+        Func<string, bool> includeFile,
+        Func<string, IReadOnlyList<UsageEntry>> parse)
+    {
+        EnsureLoaded();
+        var entries = new List<UsageEntry>();
+        var seenFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var root in roots)
+        {
+            foreach (var file in LocalUsageReader.EnumerateUsageFiles(
+                         root,
+                         modifiedSince,
+                         allowJson))
+            {
+                if (!seenFiles.Add(file) || !includeFile(file))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    var info = new FileInfo(file);
+                    var modifiedTicks = info.LastWriteTimeUtc.Ticks;
+                    var size = info.Length;
+                    if (cache.TryGetValue(file, out var blob) &&
+                        blob.ModifiedUtcTicks == modifiedTicks &&
+                        blob.Size == size)
+                    {
+                        entries.AddRange(blob.Entries);
+                        continue;
+                    }
+
+                    var parsed = parse(file).ToList();
+                    cache[file] = new CacheBlob
+                    {
+                        ModifiedUtcTicks = modifiedTicks,
+                        Size = size,
+                        Entries = parsed,
+                    };
+                    _dirty = true;
+                    entries.AddRange(parsed);
+                }
+                catch (Exception exception) when (
+                    exception is IOException or UnauthorizedAccessException)
+                {
+                    // A live CLI can rotate a session between enumeration and opening.
+                }
+            }
+        }
+
+        SaveIfNeeded();
+        return entries;
     }
 
     private void EnsureLoaded()
@@ -122,15 +194,17 @@ public sealed class LocalUsageCache
             var snapshot = JsonSerializer.Deserialize<CacheSnapshot>(json, JsonOptions);
             if (snapshot is not null)
             {
-                _claude = new Dictionary<string, CacheBlob>(
-                    snapshot.Claude,
-                    StringComparer.OrdinalIgnoreCase);
+                _claude = CopyBlobs(snapshot.Claude);
+                _codex = CopyBlobs(snapshot.Codex);
+                _gemini = CopyBlobs(snapshot.Gemini);
             }
         }
         catch (Exception exception) when (
             exception is IOException or UnauthorizedAccessException or JsonException)
         {
             _claude.Clear();
+            _codex.Clear();
+            _gemini.Clear();
         }
     }
 
@@ -153,6 +227,8 @@ public sealed class LocalUsageCache
         var snapshot = new CacheSnapshot
         {
             Claude = _claude,
+            Codex = _codex,
+            Gemini = _gemini,
         };
         var json = JsonSerializer.SerializeToUtf8Bytes(snapshot, JsonOptions);
         var compressed = Compress(json);
@@ -181,10 +257,33 @@ public sealed class LocalUsageCache
     private void Prune(DateTimeOffset now)
     {
         var cutoffTicks = now.UtcDateTime.AddDays(-40).Ticks;
-        _claude = _claude
+        _claude = Pruned(_claude, cutoffTicks);
+        _codex = Pruned(_codex, cutoffTicks);
+        _gemini = Pruned(_gemini, cutoffTicks);
+    }
+
+    private static IReadOnlyList<string> NormalizeRoots(IEnumerable<string> roots) =>
+        roots
+            .Where(root => !string.IsNullOrWhiteSpace(root))
+            .Select(Path.GetFullPath)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+    private static Dictionary<string, CacheBlob> CopyBlobs(
+        Dictionary<string, CacheBlob>? source) =>
+        source is null
+            ? NewBlobDictionary()
+            : new Dictionary<string, CacheBlob>(source, StringComparer.OrdinalIgnoreCase);
+
+    private static Dictionary<string, CacheBlob> Pruned(
+        IEnumerable<KeyValuePair<string, CacheBlob>> source,
+        long cutoffTicks) =>
+        source
             .Where(pair => pair.Value.ModifiedUtcTicks >= cutoffTicks)
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-    }
+
+    private static Dictionary<string, CacheBlob> NewBlobDictionary() =>
+        new(StringComparer.OrdinalIgnoreCase);
 
     private static byte[] Compress(byte[] data)
     {
@@ -215,14 +314,11 @@ public sealed class LocalUsageCache
 
     private sealed class CacheSnapshot
     {
-        public Dictionary<string, CacheBlob> Claude { get; set; } =
-            new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, CacheBlob>? Claude { get; set; }
 
-        public Dictionary<string, CacheBlob> Codex { get; set; } =
-            new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, CacheBlob>? Codex { get; set; }
 
-        public Dictionary<string, CacheBlob> Gemini { get; set; } =
-            new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, CacheBlob>? Gemini { get; set; }
     }
 
     private sealed class CacheBlob

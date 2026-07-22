@@ -49,11 +49,24 @@ public partial class App : Application
         AppLog.Write($"toast compatibility assembly: {ToastCompatibilityProbe.AssemblyVersion}");
 
         _usageCache = new LocalUsageCache(
-            BuildClaudeRoots(_settings),
+            BuildUsageRoots(
+                _settings,
+                LocalUsageReader.DefaultClaudeProjectsDirectory,
+                ".claude",
+                "projects"),
+            LocalUsageReader.ResolveCodexUsageDirectories(
+                Environment.GetEnvironmentVariable("CODEX_HOME"),
+                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile),
+                _settings.ExtraHomes,
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)),
+            BuildUsageRoots(
+                _settings,
+                LocalUsageReader.DefaultGeminiTemporaryDirectory,
+                ".gemini",
+                "tmp"),
             paths.UsageCacheFile);
-        var claudeProvider = new LocalClaudeProvider(_usageCache);
         _usageStore = new UsageStore(
-            [claudeProvider],
+            UsageProviderRegistry.CreateDefault(_usageCache),
             snapshotFile: paths.LastSnapshotFile);
 
         _trayController = new TrayController(_settings, _settingsStore, _usageStore);
@@ -116,11 +129,14 @@ public partial class App : Application
         base.OnExit(e);
     }
 
-    private static IReadOnlyList<string> BuildClaudeRoots(AppSettings settings)
+    private static IReadOnlyList<string> BuildUsageRoots(
+        AppSettings settings,
+        string defaultRoot,
+        params string[] relativeSegments)
     {
         var roots = new List<string>
         {
-            LocalUsageReader.DefaultClaudeProjectsDirectory,
+            defaultRoot,
         };
 
         foreach (var home in (settings.ExtraHomes ?? []).Where(home =>
@@ -130,8 +146,7 @@ public partial class App : Application
             {
                 roots.Add(Path.Combine(
                     Environment.ExpandEnvironmentVariables(home),
-                    ".claude",
-                    "projects"));
+                    Path.Combine(relativeSegments)));
             }
             catch (Exception exception) when (
                 exception is ArgumentException or NotSupportedException)

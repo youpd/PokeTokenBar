@@ -200,6 +200,68 @@ public sealed class UsageStoreTests
     }
 
     [Fact]
+    public async Task UnknownFutureProviderFlowsThroughAllAggregation()
+    {
+        var future = new FakeProvider
+        {
+            Id = "future_tool_xyz",
+            DisplayName = "Future Tool",
+            Daily = TodayDaily(42_000_000),
+            Enrichment = Enrichment(200_000, 90_000_000, 300_000_000),
+        };
+        using var store = new UsageStore([future]);
+
+        await store.RefreshAsync(false, TestContext.Current.CancellationToken);
+
+        Assert.Equal(42_000_000, store.TodayTotalTokens);
+        Assert.Equal(90_000_000, store.WeekTotalTokens);
+        Assert.Equal(300_000_000, store.MonthTotalTokens);
+        Assert.Equal(BurnTier.Fast, store.BurnTier);
+        Assert.Equal("future_tool_xyz", store.SnapshotPreferring("future_tool_xyz")?.ProviderId);
+    }
+
+    [Fact]
+    public void DefaultProviderRegistryContainsThreeUniqueStableIds()
+    {
+        using var temporary = new TemporaryDirectory();
+        var cache = new LocalUsageCache(
+            [],
+            [],
+            [],
+            System.IO.Path.Combine(temporary.Path, "usage-cache.json"));
+
+        var ids = UsageProviderRegistry.CreateDefault(cache)
+            .Select(provider => provider.Id)
+            .ToArray();
+
+        Assert.Equal(["claude_code", "codex", "gemini"], ids);
+        Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count());
+    }
+
+    [Fact]
+    public async Task SnapshotPreferenceIsPreservedAndFallsBackToFirstProvider()
+    {
+        var claude = new FakeProvider
+        {
+            Id = "claude_code",
+            DisplayName = "Claude Code",
+            Daily = TodayDaily(1_000),
+        };
+        var codex = new FakeProvider
+        {
+            Id = "codex",
+            DisplayName = "Codex",
+            Daily = TodayDaily(2_000),
+        };
+        using var store = new UsageStore([claude, codex]);
+        await store.RefreshAsync(false, TestContext.Current.CancellationToken);
+
+        Assert.Equal("codex", store.SnapshotPreferring("codex")?.ProviderId);
+        Assert.Equal("claude_code", store.SnapshotPreferring("missing")?.ProviderId);
+        Assert.Equal("claude_code", store.SnapshotPreferring(null)?.ProviderId);
+    }
+
+    [Fact]
     public void TokenFormatterMatchesDisplayContract()
     {
         Assert.Equal("987", TokenFormatter.Compact(987));

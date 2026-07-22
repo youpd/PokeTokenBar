@@ -3,14 +3,14 @@ using PokeTokenBar.Core.Models;
 
 namespace PokeTokenBar.Core.Usage;
 
-public sealed class LocalClaudeProvider : IUsageProvider
+public sealed class LocalCodexProvider : IUsageProvider
 {
     private readonly LocalUsageCache _cache;
     private readonly Func<DateTimeOffset> _clock;
     private readonly TimeZoneInfo _timeZone;
     private readonly CultureInfo _culture;
 
-    public LocalClaudeProvider(
+    public LocalCodexProvider(
         LocalUsageCache cache,
         Func<DateTimeOffset>? clock = null,
         TimeZoneInfo? timeZone = null,
@@ -22,9 +22,9 @@ public sealed class LocalClaudeProvider : IUsageProvider
         _culture = culture ?? CultureInfo.CurrentCulture;
     }
 
-    public string Id => "claude_code";
+    public string Id => "codex";
 
-    public string DisplayName => "Claude Code";
+    public string DisplayName => "Codex";
 
     public Task<DailyUsage?> FetchDailyAsync(CancellationToken cancellationToken)
     {
@@ -33,13 +33,14 @@ public sealed class LocalClaudeProvider : IUsageProvider
             () =>
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var entries = _cache.ClaudeEntries(
+                var entries = _cache.CodexEntries(
                     LocalUsageReader.StartOfDay(now, _timeZone),
                     _timeZone);
-                cancellationToken.ThrowIfCancellationRequested();
-                return LocalUsageReader.Daily(
+                var daily = LocalUsageReader.Daily(
                     entries,
                     LocalUsageReader.TodayKey(now, _timeZone));
+                cancellationToken.ThrowIfCancellationRequested();
+                return daily is null ? null : daily with { TotalCost = 0 };
             },
             cancellationToken);
     }
@@ -55,16 +56,15 @@ public sealed class LocalClaudeProvider : IUsageProvider
                 var monthStart = LocalUsageReader.StartOfMonth(now, _timeZone);
                 var weekStart = LocalUsageReader.StartOfWeek(now, _culture, _timeZone);
                 var scanStart = monthStart <= weekStart ? monthStart : weekStart;
-                var entries = _cache.ClaudeEntries(scanStart, _timeZone);
+                var entries = _cache.CodexEntries(scanStart, _timeZone);
                 cancellationToken.ThrowIfCancellationRequested();
-
                 return LocalProviderAggregation.Enrichment(
                     entries,
                     now,
                     weekStart,
                     monthStart,
                     _timeZone,
-                    zeroCost: false);
+                    zeroCost: true);
             },
             cancellationToken);
     }
