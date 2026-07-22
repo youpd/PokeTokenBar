@@ -37,9 +37,9 @@ Provider incident checks read Anthropic's status summary and the Codex-specific 
 OpenAI's status page, so unrelated ChatGPT incidents do not produce a Codex warning.
 
 Codex cost is shown as an **API-equivalent estimate** calculated from the logged model and text-token
-counts. The Codex row labels it as a subscription-plan estimate because it is not an actual Codex
-subscription charge or invoice. Tool-call fees, regional uplifts, long-context multipliers, discounts,
-and pricing changes may make a real API bill differ from this estimate.
+counts. The compact Codex row uses `API $… (subscription)` (`API $… (구독)` in Korean) because it is
+not an actual Codex subscription charge or invoice. Tool-call fees, regional uplifts, long-context
+multipliers, discounts, and pricing changes may make a real API bill differ from this estimate.
 
 Application state is stored under `%LOCALAPPDATA%\PokeTokenBar`:
 
