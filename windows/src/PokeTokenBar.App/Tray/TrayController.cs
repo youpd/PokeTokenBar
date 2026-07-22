@@ -1,10 +1,14 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using H.NotifyIcon;
 using Microsoft.Toolkit.Uwp.Notifications;
 using PokeTokenBar.App.Views;
+using PokeTokenBar.Core.Companion;
 using PokeTokenBar.Core.Models;
+using PokeTokenBar.Core.Poke;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
 
@@ -15,30 +19,41 @@ internal sealed class TrayController : IDisposable
     private readonly AppSettings _settings;
     private readonly SettingsStore _settingsStore;
     private readonly UsageStore _usageStore;
-    private readonly FlyoutWindow _flyout = new();
+    private readonly CompanionStore _companionStore;
+    private readonly SpriteStore _spriteStore;
+    private readonly FlyoutWindow _flyout;
     private readonly StackPanel _tooltipContent = new();
     private readonly TaskbarIcon _trayIcon;
+    private readonly GeneratedIconSource _eggIcon = new()
+    {
+        Text = "🥚",
+        FontFamily = new FontFamily("Segoe UI Emoji"),
+        FontSize = 40,
+        Background = Brushes.Transparent,
+    };
+    private readonly DispatcherTimer _animationTimer;
+    private (string Key, GeneratedIconSource Low, GeneratedIconSource High)? _spriteFrames;
+    private bool _highFrame;
     private SettingsWindow? _settingsWindow;
 
     public TrayController(
         AppSettings settings,
         SettingsStore settingsStore,
-        UsageStore usageStore)
+        UsageStore usageStore,
+        CompanionStore companionStore,
+        SpriteStore spriteStore)
     {
         _settings = settings;
         _settingsStore = settingsStore;
         _usageStore = usageStore;
+        _companionStore = companionStore;
+        _spriteStore = spriteStore;
+        _flyout = new FlyoutWindow(companionStore, spriteStore);
 
         _trayIcon = new TaskbarIcon
         {
             ToolTipText = "PokeTokenBar — 알 · —",
-            IconSource = new GeneratedIconSource
-            {
-                Text = "🥚",
-                FontFamily = new FontFamily("Segoe UI Emoji"),
-                FontSize = 40,
-                Background = Brushes.Transparent,
-            },
+            IconSource = _eggIcon,
             TrayToolTip = BuildCustomTooltip(),
             ContextMenu = BuildContextMenu(),
         };
@@ -46,9 +61,18 @@ internal sealed class TrayController : IDisposable
         _trayIcon.TrayLeftMouseUp += (_, _) => ToggleFlyout();
         _usageStore.Changed += UsageStore_OnChanged;
         _usageStore.LimitAlertsRaised += UsageStore_OnLimitAlertsRaised;
+        _companionStore.Changed += CompanionStore_OnChanged;
+        _companionStore.CompanionEventRaised += CompanionStore_OnEvent;
         _flyout.RefreshRequested = RequestRefreshAsync;
         _flyout.ClaudeLimitsRefreshRequested = () =>
             _usageStore.RefreshClaudeLimitsFromCredentialAsync();
+        _animationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _animationTimer.Tick += (_, _) =>
+        {
+            if (_spriteFrames is not { } frames) return;
+            _highFrame = !_highFrame;
+            _trayIcon.IconSource = _highFrame ? frames.High : frames.Low;
+        };
     }
 
     public Func<Task>? RefreshRequested { get; set; }
@@ -58,6 +82,7 @@ internal sealed class TrayController : IDisposable
     public void Start()
     {
         _trayIcon.ForceCreate();
+        _animationTimer.Start();
         UpdatePresentation();
         AppLog.Write("tray icon created");
     }
@@ -73,6 +98,9 @@ internal sealed class TrayController : IDisposable
     {
         _usageStore.Changed -= UsageStore_OnChanged;
         _usageStore.LimitAlertsRaised -= UsageStore_OnLimitAlertsRaised;
+        _companionStore.Changed -= CompanionStore_OnChanged;
+        _companionStore.CompanionEventRaised -= CompanionStore_OnEvent;
+        _animationTimer.Stop();
         _flyout.CloseForShutdown();
         _settingsWindow?.Close();
         _trayIcon.Dispose();
@@ -189,6 +217,40 @@ internal sealed class TrayController : IDisposable
         }
     }
 
+    private void CompanionStore_OnChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current.Dispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            UpdatePresentation();
+        }
+        else
+        {
+            dispatcher.BeginInvoke(UpdatePresentation);
+        }
+    }
+
+    private void CompanionStore_OnEvent(CompanionEvent companionEvent)
+    {
+        if (!_settings.CompanionNotifications || !AppEnv.IsRealApp)
+        {
+            return;
+        }
+
+        try
+        {
+            new ToastContentBuilder()
+                .AddArgument("companion", companionEvent.Kind)
+                .AddText(companionEvent.Title)
+                .AddText(companionEvent.Body)
+                .Show();
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"companion toast failed: {exception.Message}");
+        }
+    }
+
     private static void UsageStore_OnLimitAlertsRaised(IReadOnlyList<LimitAlert> alerts)
     {
         foreach (var alert in alerts)
@@ -210,7 +272,8 @@ internal sealed class TrayController : IDisposable
 
     private void UpdatePresentation()
     {
-        const string header = "PokeTokenBar — 알";
+        var companionName = _companionStore.IsEgg ? "알" : _companionStore.DisplayName;
+        var header = $"PokeTokenBar — {companionName}";
         var lines = TrayText.TooltipLines(
             header,
             _usageStore.LastUpdated is not null,
@@ -237,5 +300,59 @@ internal sealed class TrayController : IDisposable
         }
 
         _flyout.UpdateDisplay(_usageStore);
+        _ = UpdateTrayIconAsync();
+    }
+
+    private async Task UpdateTrayIconAsync()
+    {
+        if (_companionStore.CurrentSpeciesID is not { } speciesId)
+        {
+            _spriteFrames = null;
+            _trayIcon.IconSource = _eggIcon;
+            return;
+        }
+
+        var key = $"{speciesId}:{_companionStore.CurrentIsShiny}";
+        if (_spriteFrames is { } existing && existing.Key == key)
+        {
+            return;
+        }
+
+        var data = await _spriteStore.GetSpeciesAsync(
+            speciesId,
+            animated: false,
+            _companionStore.CurrentIsShiny);
+        if (data is null)
+        {
+            return;
+        }
+
+        var cachedPath = _spriteStore.FindCachedSpeciesPath(
+            speciesId,
+            animated: false,
+            _companionStore.CurrentIsShiny);
+        if (cachedPath is null)
+        {
+            return;
+        }
+
+        var image = new BitmapImage(new Uri(cachedPath, UriKind.Absolute));
+        image.Freeze();
+        var low = new GeneratedIconSource
+        {
+            Text = string.Empty,
+            Background = Brushes.Transparent,
+            BackgroundSource = image,
+            Margin = new Thickness(5, 5, 5, 2),
+        };
+        var high = new GeneratedIconSource
+        {
+            Text = string.Empty,
+            Background = Brushes.Transparent,
+            BackgroundSource = image,
+            Margin = new Thickness(5, 2, 5, 5),
+        };
+        _spriteFrames = (key, low, high);
+        _trayIcon.IconSource = low;
     }
 }

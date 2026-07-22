@@ -4,10 +4,12 @@ using System.Windows;
 using System.Windows.Threading;
 using PokeTokenBar.App.Platform;
 using PokeTokenBar.App.Tray;
+using PokeTokenBar.Core.Companion;
 using PokeTokenBar.Core.Limits;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
+using PokeTokenBar.Core.Poke;
 
 namespace PokeTokenBar.App;
 
@@ -20,6 +22,9 @@ public partial class App : Application
     private UsageStore? _usageStore;
     private ClaudeLimitsProvider? _claudeLimitsProvider;
     private StatuspageProvider? _statusProvider;
+    private PokeApiClient? _pokeApiClient;
+    private SpriteStore? _spriteStore;
+    private CompanionStore? _companionStore;
     private UsageRefreshCoordinator? _refreshCoordinator;
     private TrayController? _trayController;
     private bool _crashReporterInstalled;
@@ -28,7 +33,15 @@ public partial class App : Application
     {
         base.OnStartup(e);
 
-        if (!SingleInstanceGuard.TryAcquire(
+        var allowSecondaryForQa = false;
+#if DEBUG
+        allowSecondaryForQa = string.Equals(
+            Environment.GetEnvironmentVariable("PTB_ALLOW_SECONDARY"),
+            "1",
+            StringComparison.Ordinal);
+#endif
+        if (!allowSecondaryForQa &&
+            !SingleInstanceGuard.TryAcquire(
                 SingleInstanceGuard.ApplicationMutexName,
                 out _singleInstance))
         {
@@ -81,7 +94,19 @@ public partial class App : Application
             codexLimitsProvider: codexLimitsProvider,
             statusProvider: _statusProvider);
 
-        _trayController = new TrayController(_settings, _settingsStore, _usageStore);
+        _pokeApiClient = new PokeApiClient(paths.BaseIndexFile);
+        _spriteStore = new SpriteStore(paths.SpritesDirectory);
+        _companionStore = new CompanionStore(
+            _pokeApiClient,
+            stateFile: CompanionStore.DefaultStateFile());
+        _usageStore.Changed += UsageStore_OnChangedForCompanion;
+
+        _trayController = new TrayController(
+            _settings,
+            _settingsStore,
+            _usageStore,
+            _companionStore,
+            _spriteStore);
         _refreshCoordinator = new UsageRefreshCoordinator(
             _usageStore,
             _settings,
@@ -99,9 +124,14 @@ public partial class App : Application
         if (e.Args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
         {
             _trayController.ShowFlyoutForSmokeTest();
+            var smokeSeconds = int.TryParse(
+                Environment.GetEnvironmentVariable("PTB_SMOKE_SECONDS"),
+                out var configuredSmokeSeconds)
+                ? Math.Clamp(configuredSmokeSeconds, 10, 120)
+                : 15;
             var smokeTimer = new DispatcherTimer
             {
-                Interval = TimeSpan.FromSeconds(15),
+                Interval = TimeSpan.FromSeconds(smokeSeconds),
             };
             smokeTimer.Tick += (_, _) =>
             {
@@ -116,11 +146,18 @@ public partial class App : Application
     protected override void OnExit(ExitEventArgs e)
     {
         _refreshCoordinator?.Dispose();
+        if (_usageStore is not null)
+        {
+            _usageStore.Changed -= UsageStore_OnChangedForCompanion;
+        }
         _usageCache?.Flush();
         _trayController?.Dispose();
         _usageStore?.Dispose();
         _claudeLimitsProvider?.Dispose();
         _statusProvider?.Dispose();
+        _companionStore?.Dispose();
+        _spriteStore?.Dispose();
+        _pokeApiClient?.Dispose();
 
         if (_settingsStore is not null && _settings is not null)
         {
@@ -178,5 +215,30 @@ public partial class App : Application
     {
         CrashReporter.Report(e.Exception, "DispatcherUnhandledException");
         e.Handled = false;
+    }
+
+    private async void UsageStore_OnChangedForCompanion(object? sender, EventArgs e)
+    {
+        if (_usageStore is null || _companionStore is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _companionStore.UpdateAsync(
+                _usageStore.TodayTotalTokens,
+                _usageStore.TodayKey,
+                _usageStore.BurnTier,
+                _usageStore.IsLimitWarning,
+                _usageStore.HasUsageData);
+            _companionStore.GrantCandies(
+                _usageStore.CandyEligibleWindows,
+                _usageStore.LimitsReady);
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"companion refresh failed: {exception}");
+        }
     }
 }

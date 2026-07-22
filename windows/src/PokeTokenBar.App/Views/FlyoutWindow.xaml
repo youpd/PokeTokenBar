@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PokeTokenBar"
     Width="420"
-    Height="800"
+    Height="780"
     AllowsTransparency="True"
     Background="Transparent"
     ResizeMode="NoResize"
@@ -14,7 +14,7 @@
     WindowStyle="None">
     <Border
         Margin="8"
-        Padding="20"
+        Padding="16"
         Background="{StaticResource WindowBackgroundBrush}"
         BorderBrush="#33404A5A"
         BorderThickness="1"
@@ -22,317 +22,207 @@
         <Border.Effect>
             <DropShadowEffect BlurRadius="20" Opacity="0.36" ShadowDepth="4" />
         </Border.Effect>
-
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
-
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <TextBlock
-                    VerticalAlignment="Center"
-                    FontFamily="Segoe UI Emoji"
-                    FontSize="28"
-                    Text="🥚" />
-                <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
-                    <TextBlock
-                        FontSize="18"
-                        FontWeight="SemiBold"
-                        Foreground="{StaticResource PrimaryTextBrush}"
-                        Text="PokeTokenBar" />
-                    <TextBlock
-                        Foreground="{StaticResource SecondaryTextBrush}"
-                        Text="로컬 AI 사용량" />
+                <StackPanel>
+                    <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="PokeTokenBar" />
+                    <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="AI usage companion" />
                 </StackPanel>
                 <Button
                     x:Name="RefreshButton"
-                    Grid.Column="2"
+                    Grid.Column="1"
                     Width="36"
                     Height="30"
                     Background="#FF2A2E36"
                     BorderBrush="#FF4B5565"
-                    BorderThickness="1"
                     Click="RefreshButton_OnClick"
-                    Content="↻"
                     FontSize="18"
                     Foreground="{StaticResource PrimaryTextBrush}"
-                    ToolTip="지금 새로고침" />
+                    ToolTip="지금 새로고침">
+                    <TextBlock FontFamily="Segoe UI Symbol" Text="↻" />
+                </Button>
             </Grid>
 
-            <Separator Grid.Row="1" Margin="0,14,0,14" Opacity="0.25" />
-
-            <Border
-                Grid.Row="2"
-                Padding="16"
-                Background="{StaticResource CardBackgroundBrush}"
-                CornerRadius="12">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock
-                            Foreground="{StaticResource SecondaryTextBrush}"
-                            Text="오늘" />
-                        <TextBlock
-                            x:Name="TodayTokensText"
-                            Margin="0,3,0,0"
-                            FontSize="27"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="—" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
-                        <TextBlock
-                            HorizontalAlignment="Right"
-                            Foreground="{StaticResource SecondaryTextBrush}"
-                            Text="예상 비용" />
-                        <TextBlock
-                            x:Name="TodayCostText"
-                            Margin="0,3,0,2"
-                            HorizontalAlignment="Right"
-                            FontSize="16"
-                            Foreground="{StaticResource AccentBrush}"
-                            Text="—" />
-                    </StackPanel>
-                </Grid>
-            </Border>
-
-            <Grid Grid.Row="3" Margin="0,10,0,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="10" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <Border Padding="14" Background="{StaticResource CardBackgroundBrush}" CornerRadius="12">
-                    <StackPanel>
-                        <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 주" />
-                        <TextBlock
-                            x:Name="WeekTokensText"
-                            Margin="0,5,0,0"
-                            FontSize="18"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="—" />
-                    </StackPanel>
-                </Border>
-                <Border
-                    Grid.Column="2"
-                    Padding="14"
-                    Background="{StaticResource CardBackgroundBrush}"
-                    CornerRadius="12">
-                    <StackPanel>
-                        <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 달" />
-                        <TextBlock
-                            x:Name="MonthTokensText"
-                            Margin="0,5,0,0"
-                            FontSize="18"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="—" />
-                    </StackPanel>
-                </Border>
-            </Grid>
-
-            <StackPanel
-                x:Name="ProviderChipsContainer"
-                Grid.Row="4"
-                Margin="0,10,0,0"
-                Visibility="Collapsed">
-                <TextBlock
-                    Margin="2,0,0,6"
-                    Foreground="{StaticResource SecondaryTextBrush}"
-                    Text="프로바이더" />
-                <WrapPanel x:Name="ProviderChipsPanel" />
-            </StackPanel>
-
-            <Border
-                Grid.Row="5"
-                Margin="0,10,0,0"
-                Padding="14"
-                Background="{StaticResource CardBackgroundBrush}"
-                CornerRadius="12">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            x:Name="SelectedProviderNameText"
-                            FontSize="16"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="프로바이더 없음" />
-                        <TextBlock
-                            x:Name="SelectedProviderTodayText"
-                            Grid.Column="1"
-                            Foreground="{StaticResource AccentBrush}"
-                            Text="—" />
-                    </Grid>
-                    <UniformGrid Margin="0,13,0,0" Columns="4">
+            <TabControl Grid.Row="1" Margin="0,12,0,0" Background="Transparent" BorderThickness="0">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Background" Value="#FF23262D" />
+                        <Setter Property="Foreground" Value="{StaticResource SecondaryTextBrush}" />
+                        <Setter Property="Padding" Value="13,7" />
+                        <Setter Property="Margin" Value="0,0,3,0" />
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <Border
+                                        x:Name="TabBorder"
+                                        Padding="{TemplateBinding Padding}"
+                                        Background="{TemplateBinding Background}"
+                                        CornerRadius="7">
+                                        <ContentPresenter
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            ContentSource="Header" />
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="TabBorder" Property="Background" Value="#FF355F4A" />
+                                            <Setter Property="Foreground" Value="White" />
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TabControl.Resources>
+                <TabItem Header="Home">
+                    <ScrollViewer Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{StaticResource SecondaryTextBrush}"
-                                Text="입력" />
-                            <TextBlock
-                                x:Name="InputTokensText"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource PrimaryTextBrush}"
-                                Text="—" />
+                            <Border Padding="14" Background="#FF202832" CornerRadius="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="86" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid Width="80" Height="80">
+                                        <Image
+                                            x:Name="CompanionSpriteImage"
+                                            Width="76"
+                                            Height="76"
+                                            RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                            Stretch="Uniform">
+                                            <Image.RenderTransform>
+                                                <TranslateTransform x:Name="CompanionBobTransform" />
+                                            </Image.RenderTransform>
+                                        </Image>
+                                        <TextBlock
+                                            x:Name="CompanionEmojiText"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            FontFamily="Segoe UI Emoji"
+                                            FontSize="54"
+                                            Foreground="#FFFFE7A3"
+                                            Text="🥚" />
+                                    </Grid>
+                                    <StackPanel Grid.Column="1" Margin="10,0,0,0" VerticalAlignment="Center">
+                                        <TextBlock x:Name="CompanionNameText" FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="Token Egg" />
+                                        <TextBlock x:Name="CompanionMetaText" Margin="0,3,0,0" Foreground="{StaticResource AccentBrush}" Text="5M tokens to hatch" />
+                                        <ProgressBar x:Name="CompanionProgressBar" Height="7" Margin="0,9,0,0" Maximum="100" />
+                                        <Grid Margin="0,4,0,0">
+                                            <TextBlock x:Name="CompanionStatusText" Foreground="{StaticResource SecondaryTextBrush}" Text="Sleeping in the egg" />
+                                            <TextBlock x:Name="CompanionProgressText" HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" Text="0%" />
+                                        </Grid>
+                                        <TextBlock x:Name="CompanionLineText" Margin="0,3,0,0" FontSize="11" Foreground="{StaticResource SecondaryTextBrush}" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Border Margin="0,10,0,0" Padding="14" Background="{StaticResource CardBackgroundBrush}" CornerRadius="12">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel>
+                                        <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="오늘" />
+                                        <TextBlock x:Name="TodayTokensText" Margin="0,3,0,0" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
+                                        <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" Text="예상 비용" />
+                                        <TextBlock x:Name="TodayCostText" Margin="0,3,0,2" HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" Text="—" />
+                                    </StackPanel>
+                                </Grid>
+                            </Border>
+
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Border Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
+                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 주" /><TextBlock x:Name="WeekTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                </Border>
+                                <Border Grid.Column="2" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
+                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 달" /><TextBlock x:Name="MonthTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                </Border>
+                            </Grid>
+
+                            <StackPanel x:Name="ProviderChipsContainer" Margin="0,10,0,0" Visibility="Collapsed">
+                                <TextBlock Margin="2,0,0,5" Foreground="{StaticResource SecondaryTextBrush}" Text="프로바이더" />
+                                <WrapPanel x:Name="ProviderChipsPanel" />
+                            </StackPanel>
+
+                            <Border Margin="0,10,0,0" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="SelectedProviderNameText" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="프로바이더 없음" />
+                                        <TextBlock x:Name="SelectedProviderTodayText" Grid.Column="1" Foreground="{StaticResource AccentBrush}" Text="—" />
+                                    </Grid>
+                                    <UniformGrid Margin="0,10,0,0" Columns="4">
+                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="입력" /><TextBlock x:Name="InputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="출력" /><TextBlock x:Name="OutputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="캐시 생성" /><TextBlock x:Name="CacheWriteTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="캐시 읽기" /><TextBlock x:Name="CacheReadTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                    </UniformGrid>
+                                </StackPanel>
+                            </Border>
+
+                            <Border x:Name="StatusBanner" Margin="0,10,0,0" Padding="10" Background="#443B2C16" BorderBrush="#FFB7791F" BorderThickness="1" CornerRadius="9" Visibility="Collapsed">
+                                <TextBlock x:Name="StatusBannerText" Foreground="#FFFFD28A" TextWrapping="Wrap" />
+                            </Border>
+
+                            <Border Margin="0,10,0,0" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="선택 프로바이더 5시간 블록" /><TextBlock x:Name="BlockTokensText" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                    <TextBlock x:Name="BurnRateText" Grid.Column="1" VerticalAlignment="Bottom" Foreground="{StaticResource SecondaryTextBrush}" />
+                                </Grid>
+                            </Border>
+
+                            <Border x:Name="LimitSectionBorder" Margin="0,10,0,0" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10" Visibility="Collapsed">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="LimitSectionTitle" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="공식 한도" />
+                                        <Button x:Name="ReloadClaudeLimitsButton" Grid.Column="1" Padding="8,3" Click="ReloadClaudeLimitsButton_OnClick" Content="다시 읽기" Visibility="Collapsed" />
+                                    </Grid>
+                                    <TextBlock x:Name="LimitSectionMessage" Margin="0,6,0,0" Foreground="{StaticResource SecondaryTextBrush}" TextWrapping="Wrap" Visibility="Collapsed" />
+                                    <StackPanel x:Name="LimitRowsPanel" Margin="0,7,0,0" />
+                                </StackPanel>
+                            </Border>
+                            <TextBlock x:Name="RefreshStatusText" Margin="2,12,2,10" Foreground="{StaticResource SecondaryTextBrush}" Text="사용량 불러오는 중…" TextTrimming="CharacterEllipsis" />
                         </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Shop">
+                    <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{StaticResource SecondaryTextBrush}"
-                                Text="출력" />
-                            <TextBlock
-                                x:Name="OutputTokensText"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource PrimaryTextBrush}"
-                                Text="—" />
+                            <Border Padding="14" Background="{StaticResource CardBackgroundBrush}" CornerRadius="12">
+                                <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="사용 가능한 토큰" /><TextBlock x:Name="WalletText" Margin="0,4,0,0" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="0" /></StackPanel>
+                            </Border>
+                            <StackPanel x:Name="ShopPanel" Margin="0,10,0,0" />
                         </StackPanel>
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Bag">
+                    <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="BagPanel" />
+                    </ScrollViewer>
+                </TabItem>
+
+                <TabItem Header="Collection">
+                    <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{StaticResource SecondaryTextBrush}"
-                                Text="캐시 생성" />
-                            <TextBlock
-                                x:Name="CacheWriteTokensText"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource PrimaryTextBrush}"
-                                Text="—" />
+                            <TextBlock x:Name="CollectionSummaryText" Margin="2,0,0,8" Foreground="{StaticResource SecondaryTextBrush}" Text="Collection 0" />
+                            <StackPanel x:Name="CollectionPanel" />
                         </StackPanel>
-                        <StackPanel>
-                            <TextBlock
-                                HorizontalAlignment="Center"
-                                Foreground="{StaticResource SecondaryTextBrush}"
-                                Text="캐시 읽기" />
-                            <TextBlock
-                                x:Name="CacheReadTokensText"
-                                Margin="0,4,0,0"
-                                HorizontalAlignment="Center"
-                                FontWeight="SemiBold"
-                                Foreground="{StaticResource PrimaryTextBrush}"
-                                Text="—" />
-                        </StackPanel>
-                    </UniformGrid>
-                </StackPanel>
-            </Border>
-
-            <Border
-                Grid.Row="6"
-                x:Name="StatusBanner"
-                Margin="0,10,0,0"
-                Padding="12,9"
-                Background="#443B2C16"
-                BorderBrush="#FFB7791F"
-                BorderThickness="1"
-                CornerRadius="9"
-                Visibility="Collapsed">
-                <TextBlock
-                    x:Name="StatusBannerText"
-                    Foreground="#FFFFD28A"
-                    TextWrapping="Wrap" />
-            </Border>
-
-            <Border
-                Grid.Row="7"
-                Margin="0,10,0,0"
-                Padding="14"
-                Background="{StaticResource CardBackgroundBrush}"
-                CornerRadius="12">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel>
-                        <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="선택 프로바이더 5시간 블록" />
-                        <TextBlock
-                            x:Name="BlockTokensText"
-                            Margin="0,5,0,0"
-                            FontSize="18"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="—" />
-                    </StackPanel>
-                    <TextBlock
-                        x:Name="BurnRateText"
-                        Grid.Column="1"
-                        VerticalAlignment="Bottom"
-                        Foreground="{StaticResource SecondaryTextBrush}"
-                        Text="" />
-                </Grid>
-            </Border>
-
-            <Border
-                x:Name="LimitSectionBorder"
-                Grid.Row="8"
-                Margin="0,10,0,0"
-                Padding="14"
-                Background="{StaticResource CardBackgroundBrush}"
-                CornerRadius="12"
-                Visibility="Collapsed">
-                <StackPanel>
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock
-                            x:Name="LimitSectionTitle"
-                            FontWeight="SemiBold"
-                            Foreground="{StaticResource PrimaryTextBrush}"
-                            Text="공식 한도" />
-                        <Button
-                            x:Name="ReloadClaudeLimitsButton"
-                            Grid.Column="1"
-                            Padding="8,3"
-                            Click="ReloadClaudeLimitsButton_OnClick"
-                            Content="다시 읽기"
-                            Visibility="Collapsed" />
-                    </Grid>
-                    <TextBlock
-                        x:Name="LimitSectionMessage"
-                        Margin="0,6,0,0"
-                        Foreground="{StaticResource SecondaryTextBrush}"
-                        TextWrapping="Wrap"
-                        Visibility="Collapsed" />
-                    <StackPanel x:Name="LimitRowsPanel" Margin="0,7,0,0" />
-                </StackPanel>
-            </Border>
-
-            <TextBlock
-                x:Name="RefreshStatusText"
-                Grid.Row="9"
-                Margin="2,14,2,0"
-                VerticalAlignment="Bottom"
-                Foreground="{StaticResource SecondaryTextBrush}"
-                Text="사용량 불러오는 중…"
-                TextTrimming="CharacterEllipsis" />
+                    </ScrollViewer>
+                </TabItem>
+            </TabControl>
         </Grid>
     </Border>
 </Window>

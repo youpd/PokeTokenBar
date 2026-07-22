@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using PokeTokenBar.Core.Companion;
 using PokeTokenBar.Core.Limits;
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Util;
@@ -173,6 +174,41 @@ public sealed class UsageStore : IDisposable
             }
 
             return values.Count == 0 ? null : string.Join(" · ", values);
+        }
+    }
+
+    public bool LimitsReady => ClaudeLimits is not null || CodexLimits is not null;
+
+    public IReadOnlyList<CandyWindow> CandyEligibleWindows
+    {
+        get
+        {
+            var values = new List<CandyWindow>();
+            if (ClaudeLimits?.FiveHour?.Utilization is { } session)
+            {
+                values.Add(new CandyWindow(
+                    "claude.fiveHour",
+                    "Claude 5h",
+                    WindowClass.Session,
+                    session));
+            }
+
+            if (ClaudeLimits?.SevenDay?.Utilization is { } weekly)
+            {
+                values.Add(new CandyWindow(
+                    "claude.sevenDay",
+                    "Claude weekly",
+                    WindowClass.Weekly,
+                    weekly));
+            }
+
+            foreach (var snapshot in CodexLimits?.Snapshots ?? [])
+            {
+                AddCodexCandyWindow(values, snapshot, snapshot.Primary, "primary");
+                AddCodexCandyWindow(values, snapshot, snapshot.Secondary, "secondary");
+            }
+
+            return values;
         }
     }
 
@@ -554,6 +590,20 @@ public sealed class UsageStore : IDisposable
             snapshot.ProviderId == providerId &&
             snapshot.Today?.Date == today &&
             snapshot.Today.TotalTokens > 0);
+    }
+
+    private static void AddCodexCandyWindow(
+        ICollection<CandyWindow> values,
+        CodexRateLimitSnapshot snapshot,
+        CodexRateLimitWindow? window,
+        string suffix)
+    {
+        if (window is null) return;
+        values.Add(new CandyWindow(
+            $"codex.{snapshot.BucketKey}.{suffix}",
+            $"{snapshot.DisplayName} {suffix}",
+            window.WindowDurationMins > 1440 ? WindowClass.Weekly : WindowClass.Session,
+            window.UsedPercent));
     }
 
     private async Task RetryEmptyUsageAsync(CancellationTokenSource cancellation)

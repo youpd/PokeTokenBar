@@ -1,8 +1,13 @@
 using System.ComponentModel;
+using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using PokeTokenBar.Core.Companion;
 using PokeTokenBar.Core.Models;
+using PokeTokenBar.Core.Poke;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
 
@@ -17,10 +22,29 @@ public partial class FlyoutWindow : Window
     private bool _keepOpenWhenDeactivated;
     private string? _selectedProviderId;
     private UsageStore? _lastStore;
+    private readonly CompanionStore? _companionStore;
+    private readonly SpriteStore? _spriteStore;
+    private readonly DispatcherTimer _bobTimer;
+    private bool _bobUp;
+    private int _spriteRequestId;
+    private readonly HashSet<string> _dexBackfills = new(StringComparer.Ordinal);
 
-    public FlyoutWindow()
+    public FlyoutWindow() : this(null, null)
     {
+    }
+
+    public FlyoutWindow(CompanionStore? companionStore, SpriteStore? spriteStore)
+    {
+        _companionStore = companionStore;
+        _spriteStore = spriteStore;
         InitializeComponent();
+        _bobTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _bobTimer.Tick += (_, _) =>
+        {
+            _bobUp = !_bobUp;
+            CompanionBobTransform.Y = _bobUp ? -3 : 1;
+        };
+        _bobTimer.Start();
         Deactivated += (_, _) =>
         {
             if (!_keepOpenWhenDeactivated)
@@ -56,6 +80,9 @@ public partial class FlyoutWindow : Window
         UpdateProviderDetails(selected);
         UpdateStatusBanner(store);
         UpdateLimits(store, selected);
+        UpdateCompanionDisplay();
+        UpdateShopAndBag();
+        UpdateCollection();
 
         var block = selected?.ActiveBlock;
         BlockTokensText.Text = block is null
@@ -134,6 +161,306 @@ public partial class FlyoutWindow : Window
             : $"오늘 {TokenFormatter.Compact(today.TotalTokens)} · {TokenFormatter.Cost(today.TotalCost)}";
         SetTokenBreakdown(today);
     }
+
+    private void UpdateCompanionDisplay()
+    {
+        if (_companionStore is null)
+        {
+            return;
+        }
+
+        var active = _companionStore.State.Active;
+        if (active is null)
+        {
+            CompanionSpriteImage.Visibility = Visibility.Collapsed;
+            CompanionEmojiText.Visibility = Visibility.Visible;
+            CompanionEmojiText.Text = "🥚";
+            CompanionNameText.Text = "Token Egg";
+            CompanionMetaText.Text = $"{TokenFormatter.Compact(_companionStore.EggTokensToHatch)} tokens to hatch";
+            CompanionLineText.Text = string.Empty;
+        }
+        else
+        {
+            CompanionEmojiText.Visibility = Visibility.Collapsed;
+            CompanionSpriteImage.Visibility = Visibility.Visible;
+            CompanionNameText.Text = (_companionStore.CurrentIsShiny ? "✨ " : string.Empty) +
+                _companionStore.DisplayName;
+            var nature = active.Nature?.DisplayName(_companionStore.State.Language) ?? "?";
+            CompanionMetaText.Text = $"{active.Rarity} · {_companionStore.StageText} · {nature}";
+            CompanionLineText.Text = string.Join(
+                "  →  ",
+                _companionStore.LineNodes.Select(node =>
+                    node.Kind == "cur" ? $"● #{node.Id}" : $"○ #{node.Id}"));
+            _ = LoadCompanionSpriteAsync(active.CurrentID, _companionStore.CurrentIsShiny);
+        }
+
+        CompanionProgressBar.Value = _companionStore.Progress * 100;
+        CompanionProgressText.Text = TokenFormatter.Percent(_companionStore.Progress * 100);
+        CompanionStatusText.Text = _companionStore.DisplayState switch
+        {
+            CompanionStateKind.Egg => "Growing inside the egg",
+            CompanionStateKind.Working => "Working with you",
+            CompanionStateKind.Focus => "Deep focus!",
+            CompanionStateKind.Tired => "Rest before the limit",
+            CompanionStateKind.Sleep => "Sleeping",
+            CompanionStateKind.LevelUp => _companionStore.JustGraduated is { } graduated
+                ? $"{graduated} graduated!"
+                : _companionStore.JustEvolvedTo is { } evolved
+                    ? $"Evolved into {evolved}!"
+                    : "Leveled up!",
+            _ => "Ready",
+        };
+    }
+
+    private void UpdateShopAndBag()
+    {
+        if (_companionStore is null)
+        {
+            return;
+        }
+
+        WalletText.Text = TokenFormatter.Compact(_companionStore.AvailableTokens);
+        ShopPanel.Children.Clear();
+        foreach (var kind in Enum.GetValues<ItemKind>())
+        {
+            var button = new Button
+            {
+                Content = kind.IsPassive() && _companionStore.ItemCount(kind) > 0
+                    ? "Active"
+                    : "Buy",
+                IsEnabled = _companionStore.CanBuy(kind),
+                MinWidth = 64,
+            };
+            button.Click += (_, _) =>
+            {
+                _companionStore.Buy(kind);
+                UpdateShopAndBag();
+            };
+            ShopPanel.Children.Add(BuildItemCard(
+                kind,
+                ItemDisplayName(kind),
+                $"{TokenFormatter.Compact(kind.ShopPrice())} tokens",
+                button));
+        }
+
+        BagPanel.Children.Clear();
+        if (_companionStore.OwnedItems.Count == 0)
+        {
+            BagPanel.Children.Add(new TextBlock
+            {
+                Text = "Your bag is empty.",
+                Foreground = (Brush)FindResource("SecondaryTextBrush"),
+                Margin = new Thickness(4),
+            });
+        }
+
+        foreach (var item in _companionStore.OwnedItems)
+        {
+            var button = new Button { MinWidth = 64 };
+            if (item.Kind.IsPassive())
+            {
+                button.Content = "Active";
+                button.IsEnabled = false;
+            }
+            else if (item.Kind == ItemKind.RareCandy)
+            {
+                button.Content = "Use";
+                button.IsEnabled = _companionStore.CanUseRareCandy;
+                button.Click += async (_, _) =>
+                {
+                    await _companionStore.UseRareCandyAsync();
+                    UpdateDisplay(_lastStore!);
+                };
+            }
+            else
+            {
+                button.Content = "Use";
+                button.IsEnabled = _companionStore.CanUseMint;
+                button.Click += (_, _) =>
+                {
+                    _companionStore.UseMint();
+                    UpdateDisplay(_lastStore!);
+                };
+            }
+
+            BagPanel.Children.Add(BuildItemCard(
+                item.Kind,
+                ItemDisplayName(item.Kind),
+                $"×{item.Count}",
+                button));
+        }
+    }
+
+    private void UpdateCollection()
+    {
+        if (_companionStore is null)
+        {
+            return;
+        }
+
+        var entries = _companionStore.DexEntriesSorted;
+        CollectionSummaryText.Text = $"Collection {entries.Count} · " +
+            string.Join("  ", Enum.GetValues<Rarity>()
+                .Reverse()
+                .Select(rarity => $"{rarity} {entries.Count(entry => entry.Rarity == rarity)}"));
+        CollectionPanel.Children.Clear();
+        if (entries.Count == 0)
+        {
+            CollectionPanel.Children.Add(new TextBlock
+            {
+                Text = "Graduate a companion to add it here.",
+                Foreground = (Brush)FindResource("SecondaryTextBrush"),
+                Margin = new Thickness(4),
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        foreach (var entry in entries)
+        {
+            var name = entry.Names is not null &&
+                entry.Names.TryGetValue(entry.FinalID, out var values)
+                ? _companionStore.State.Language.ResolveName(values) ?? $"#{entry.FinalID}"
+                : $"#{entry.FinalID}";
+            if (entry.Names is null || entry.Names.Count == 0)
+            {
+                _ = BackfillDexAsync(entry);
+            }
+            var image = new Image { Width = 52, Height = 52 };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            var text = new StackPanel { Margin = new Thickness(10, 0, 0, 0) };
+            text.Children.Add(new TextBlock
+            {
+                Text = (entry.IsShiny ? "✨ " : string.Empty) + name,
+                FontWeight = FontWeights.SemiBold,
+                Foreground = (Brush)FindResource("PrimaryTextBrush"),
+            });
+            text.Children.Add(new TextBlock
+            {
+                Text = $"{string.Join(" → ", entry.ChainOrder.Select(id => "#" + id))} · {entry.Rarity}" +
+                    (entry.Nature is { } nature
+                        ? $" · {nature.DisplayName(_companionStore.State.Language)}"
+                        : string.Empty),
+                Foreground = (Brush)FindResource("SecondaryTextBrush"),
+                TextWrapping = TextWrapping.Wrap,
+            });
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            panel.Children.Add(image);
+            panel.Children.Add(text);
+            CollectionPanel.Children.Add(new Border
+            {
+                Margin = new Thickness(0, 0, 0, 8),
+                Padding = new Thickness(12),
+                Background = (Brush)FindResource("CardBackgroundBrush"),
+                CornerRadius = new CornerRadius(10),
+                Child = panel,
+            });
+            _ = LoadImageAsync(image, entry.FinalID, entry.IsShiny);
+        }
+    }
+
+    private Border BuildItemCard(ItemKind kind, string title, string subtitle, Button action)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var iconGrid = new Grid { Width = 42, Height = 42 };
+        var emoji = new TextBlock
+        {
+            Text = kind.FallbackEmoji(),
+            FontFamily = new FontFamily("Segoe UI Emoji"),
+            FontSize = 28,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        iconGrid.Children.Add(emoji);
+        if (kind.SpriteName() is { } spriteName)
+        {
+            var image = new Image { Width = 38, Height = 38 };
+            iconGrid.Children.Add(image);
+            _ = LoadItemImageAsync(image, emoji, spriteName);
+        }
+
+        grid.Children.Add(iconGrid);
+        var labels = new StackPanel { Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        labels.Children.Add(new TextBlock { Text = title, Foreground = (Brush)FindResource("PrimaryTextBrush"), FontWeight = FontWeights.SemiBold });
+        labels.Children.Add(new TextBlock { Text = subtitle, Foreground = (Brush)FindResource("SecondaryTextBrush") });
+        Grid.SetColumn(labels, 1);
+        grid.Children.Add(labels);
+        Grid.SetColumn(action, 2);
+        grid.Children.Add(action);
+        return new Border
+        {
+            Margin = new Thickness(0, 0, 0, 8),
+            Padding = new Thickness(12),
+            Background = (Brush)FindResource("CardBackgroundBrush"),
+            CornerRadius = new CornerRadius(10),
+            Child = grid,
+        };
+    }
+
+    private async Task LoadCompanionSpriteAsync(int id, bool shiny)
+    {
+        var request = ++_spriteRequestId;
+        if (_spriteStore is null) return;
+        var bytes = await _spriteStore.GetSpeciesAsync(id, animated: true, shiny);
+        if (request == _spriteRequestId && bytes is not null)
+        {
+            CompanionSpriteImage.Source = ToBitmap(bytes);
+        }
+    }
+
+    private async Task BackfillDexAsync(DexEntry entry)
+    {
+        if (_companionStore is null || !_dexBackfills.Add(entry.Id)) return;
+        try
+        {
+            await _companionStore.ResolveDexNamesAsync(entry);
+            UpdateCollection();
+        }
+        finally
+        {
+            _dexBackfills.Remove(entry.Id);
+        }
+    }
+
+    private async Task LoadImageAsync(Image image, int id, bool shiny)
+    {
+        if (_spriteStore is null) return;
+        var bytes = await _spriteStore.GetSpeciesAsync(id, animated: false, shiny);
+        if (bytes is not null) image.Source = ToBitmap(bytes);
+    }
+
+    private async Task LoadItemImageAsync(Image image, TextBlock fallback, string name)
+    {
+        if (_spriteStore is null) return;
+        var bytes = await _spriteStore.GetItemAsync(name);
+        if (bytes is not null)
+        {
+            image.Source = ToBitmap(bytes);
+            fallback.Visibility = Visibility.Collapsed;
+        }
+    }
+
+    internal static BitmapImage ToBitmap(byte[] bytes)
+    {
+        using var stream = new MemoryStream(bytes, writable: false);
+        var image = new BitmapImage();
+        image.BeginInit();
+        image.CacheOption = BitmapCacheOption.OnLoad;
+        image.StreamSource = stream;
+        image.EndInit();
+        image.Freeze();
+        return image;
+    }
+
+    private static string ItemDisplayName(ItemKind kind) => kind switch
+    {
+        ItemKind.RareCandy => "Rare Candy",
+        ItemKind.Mint => "Mint",
+        _ => "Shiny Charm",
+    };
 
     private void UpdateStatusBanner(UsageStore store)
     {
@@ -314,6 +641,7 @@ public partial class FlyoutWindow : Window
     public void CloseForShutdown()
     {
         _isShuttingDown = true;
+        _bobTimer.Stop();
         Close();
     }
 
