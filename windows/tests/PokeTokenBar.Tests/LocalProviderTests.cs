@@ -6,16 +6,18 @@ namespace PokeTokenBar.Tests;
 public sealed class LocalProviderTests
 {
     [Fact]
-    public async Task CodexProviderForcesSubscriptionCostToZero()
+    public async Task CodexProviderReturnsApiEquivalentSubscriptionCost()
     {
         using var temporary = new TemporaryDirectory();
         var root = System.IO.Path.Combine(temporary.Path, "sessions");
         Directory.CreateDirectory(root);
         File.WriteAllText(
             System.IO.Path.Combine(root, "rollout-test.jsonl"),
+            "{\"timestamp\":\"2026-07-22T09:59:00Z\",\"payload\":{\"type\":\"turn_context\"," +
+            "\"model\":\"gpt-5.6-sol\"}}" + Environment.NewLine +
             "{\"timestamp\":\"2026-07-22T10:00:00Z\",\"payload\":{\"type\":\"token_count\"," +
-            "\"info\":{\"last_token_usage\":{\"input_tokens\":100," +
-            "\"cached_input_tokens\":80,\"output_tokens\":7}}}}");
+            "\"info\":{\"last_token_usage\":{\"input_tokens\":1000000," +
+            "\"cached_input_tokens\":800000,\"output_tokens\":100000}}}}");
         var now = new DateTimeOffset(2026, 7, 22, 12, 0, 0, TimeSpan.Zero);
         var cache = new LocalUsageCache(
             [],
@@ -33,11 +35,13 @@ public sealed class LocalProviderTests
         var enrichment = await provider.FetchEnrichmentAsync(TestContext.Current.CancellationToken);
 
         Assert.NotNull(daily);
-        Assert.Equal(107, daily.TotalTokens);
-        Assert.Equal(20, daily.InputTokens);
-        Assert.Equal(80, daily.CacheReadTokens);
-        Assert.Equal(0, daily.TotalCost);
-        Assert.Equal(0, enrichment.WeekTotal?.TotalCost);
-        Assert.Equal(0, enrichment.MonthTotal?.TotalCost);
+        Assert.Equal(1_100_000, daily.TotalTokens);
+        Assert.Equal(200_000, daily.InputTokens);
+        Assert.Equal(800_000, daily.CacheReadTokens);
+        Assert.Equal(4.4, daily.TotalCost, precision: 6);
+        Assert.NotNull(enrichment.WeekTotal);
+        Assert.NotNull(enrichment.MonthTotal);
+        Assert.Equal(4.4, enrichment.WeekTotal!.TotalCost, precision: 6);
+        Assert.Equal(4.4, enrichment.MonthTotal!.TotalCost, precision: 6);
     }
 }

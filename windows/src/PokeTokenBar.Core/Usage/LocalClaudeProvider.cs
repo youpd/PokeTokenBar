@@ -63,8 +63,7 @@ public sealed class LocalClaudeProvider : IUsageProvider
                     now,
                     weekStart,
                     monthStart,
-                    _timeZone,
-                    zeroCost: false);
+                    _timeZone);
             },
             cancellationToken);
     }

@@ -4,6 +4,12 @@ All notable changes to the Windows port are documented in this file.
 
 ## Unreleased
 
+### Changed
+
+- Show Codex model usage as an API-equivalent cost estimate and label it as subscription-plan usage,
+  instead of forcing the displayed cost to zero.
+- Add explicit current API rates for GPT-5.6 Sol, Terra, Luna, GPT-5.4, and GPT-5.3-Codex.
+
 ### Fixed
 
 - Render and cache PokéAPI's pixel-art egg sprite in the flyout and notification area, with the

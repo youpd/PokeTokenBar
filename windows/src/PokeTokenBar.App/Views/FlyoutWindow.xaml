@@ -183,7 +183,7 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <TextBlock x:Name="SelectedProviderNameText" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="프로바이더 없음" />
-                                        <TextBlock x:Name="SelectedProviderTodayText" Grid.Column="1" Foreground="{StaticResource AccentBrush}" Text="—" />
+                                        <TextBlock x:Name="SelectedProviderTodayText" Grid.Column="1" MaxWidth="390" HorizontalAlignment="Right" TextAlignment="Right" TextWrapping="Wrap" Foreground="{StaticResource AccentBrush}" Text="—" />
                                     </Grid>
                                     <UniformGrid Margin="0,10,0,0" Columns="4">
                                         <StackPanel><TextBlock x:Name="InputLabel" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Text="입력" /><TextBlock x:Name="InputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>

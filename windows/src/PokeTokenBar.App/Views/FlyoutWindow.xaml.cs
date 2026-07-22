@@ -207,9 +207,11 @@ public partial class FlyoutWindow : Window
 
         var today = snapshot.Today;
         SelectedProviderNameText.Text = snapshot.DisplayName;
-        SelectedProviderTodayText.Text = today is null
-            ? Text.TodayProvider(0, 0)
-            : Text.TodayProvider(today.TotalTokens, today.TotalCost);
+        var tokens = today?.TotalTokens ?? 0;
+        var cost = today?.TotalCost ?? 0;
+        SelectedProviderTodayText.Text = snapshot.ProviderId == "codex"
+            ? Text.CodexTodayProvider(tokens, cost)
+            : Text.TodayProvider(tokens, cost);
         SetTokenBreakdown(today);
     }
 

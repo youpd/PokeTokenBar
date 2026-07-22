@@ -189,6 +189,14 @@ public sealed class LocalUsageReaderTests
         Assert.Equal(25, ModelPricing.Cost("claude-opus-4-8", 0, 1_000_000, 0, 0));
         Assert.Equal(5, ModelPricing.Cost("claude-opus-future", 1_000_000, 0, 0, 0));
         Assert.Equal(0, ModelPricing.Cost("claude-fable-5", 1_000_000, 1_000_000, 1_000_000, 1_000_000));
+        Assert.Equal(5, ModelPricing.Cost("gpt-5.6-sol", 1_000_000, 0, 0, 0));
+        Assert.Equal(30, ModelPricing.Cost("gpt-5.6-sol", 0, 1_000_000, 0, 0));
+        Assert.Equal(6.25, ModelPricing.Cost("gpt-5.6-sol", 0, 0, 1_000_000, 0));
+        Assert.Equal(0.5, ModelPricing.Cost("gpt-5.6-sol", 0, 0, 0, 1_000_000));
+        Assert.Equal(2.5, ModelPricing.Cost("gpt-5.6-terra", 1_000_000, 0, 0, 0));
+        Assert.Equal(1, ModelPricing.Cost("gpt-5.6-luna", 1_000_000, 0, 0, 0));
+        Assert.Equal(2.5, ModelPricing.Cost("gpt-5.4", 1_000_000, 0, 0, 0));
+        Assert.Equal(1.75, ModelPricing.Cost("gpt-5.3-codex", 1_000_000, 0, 0, 0));
         Assert.Equal(0, ModelPricing.Cost("unknown", 1_000_000, 0, 0, 0));
     }
 

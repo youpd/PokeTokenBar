@@ -9,8 +9,7 @@ internal static class LocalProviderAggregation
         DateTimeOffset now,
         DateTimeOffset weekStart,
         DateTimeOffset monthStart,
-        TimeZoneInfo timeZone,
-        bool zeroCost)
+        TimeZoneInfo timeZone)
     {
         var today = LocalUsageReader.TodayKey(now, timeZone);
         var weekDay = LocalUsageReader.ToDayKey(weekStart, timeZone);
@@ -21,12 +20,6 @@ internal static class LocalProviderAggregation
             LocalUsageReader.MonthKey(now, timeZone),
             monthDay,
             today);
-        if (zeroCost)
-        {
-            week = week with { TotalCost = 0 };
-            month = month with { TotalCost = 0 };
-        }
-
         return new ProviderEnrichment(
             LocalUsageReader.ActiveBlock(entries, now),
             BlocksOk: true,

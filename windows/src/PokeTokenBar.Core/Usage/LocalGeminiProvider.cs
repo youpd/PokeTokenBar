@@ -62,8 +62,7 @@ public sealed class LocalGeminiProvider : IUsageProvider
                     now,
                     weekStart,
                     monthStart,
-                    _timeZone,
-                    zeroCost: false);
+                    _timeZone);
             },
             cancellationToken);
     }

@@ -40,7 +40,7 @@ public sealed class LocalCodexProvider : IUsageProvider
                     entries,
                     LocalUsageReader.TodayKey(now, _timeZone));
                 cancellationToken.ThrowIfCancellationRequested();
-                return daily is null ? null : daily with { TotalCost = 0 };
+                return daily;
             },
             cancellationToken);
     }
@@ -63,8 +63,7 @@ public sealed class LocalCodexProvider : IUsageProvider
                     now,
                     weekStart,
                     monthStart,
-                    _timeZone,
-                    zeroCost: true);
+                    _timeZone);
             },
             cancellationToken);
     }
