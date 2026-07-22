@@ -1,6 +1,7 @@
 using PokeTokenBar.Core.Models;
 using PokeTokenBar.Core.Usage;
 using PokeTokenBar.Core.Util;
+using System.Text.Json;
 
 namespace PokeTokenBar.Tests;
 
@@ -275,6 +276,35 @@ public sealed class UsageStoreTests
         Assert.Equal("$12.3K", TokenFormatter.CostCompact(12_340));
         Assert.Equal("88%", TokenFormatter.Percent(88));
         Assert.Equal("88.3%", TokenFormatter.Percent(88.35));
+    }
+
+    [Fact]
+    public async Task ParitySnapshotContainsTooltipProvidersLimitsAndErrors()
+    {
+        using var temporary = new TemporaryDirectory();
+        var path = Path.Combine(temporary.Path, "last-snapshot.json");
+        var provider = new FakeProvider { Daily = TodayDaily(1_200_000, 3.45) };
+        var settings = new AppSettings
+        {
+            ShowTokensInMenu = true,
+            ShowCostInMenu = true,
+            ShowLimitInMenu = true,
+        };
+        using var store = new UsageStore([provider], snapshotFile: path, settings: settings);
+
+        await store.RefreshAsync(false, TestContext.Current.CancellationToken);
+
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        Assert.Equal(1_200_000, root.GetProperty("todayTotalTokens").GetInt64());
+        Assert.Equal("PokeTokenBar", root.GetProperty("tooltipLines")[0].GetString());
+        Assert.Equal("1.2M", root.GetProperty("tooltipLines")[1].GetString());
+        Assert.Equal("$3.5", root.GetProperty("tooltipLines")[2].GetString());
+        Assert.Equal("claude_code", root.GetProperty("providers")[0]
+            .GetProperty("providerId").GetString());
+        Assert.True(root.TryGetProperty("limits", out _));
+        Assert.True(root.TryGetProperty("providerStatuses", out _));
+        Assert.True(root.TryGetProperty("lastError", out _));
     }
 
     private static DailyUsage TodayDaily(long tokens, double cost = 0) =>

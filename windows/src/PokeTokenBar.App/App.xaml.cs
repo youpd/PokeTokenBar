@@ -27,6 +27,8 @@ public partial class App : Application
     private CompanionStore? _companionStore;
     private UsageRefreshCoordinator? _refreshCoordinator;
     private TrayController? _trayController;
+    private UpdateChecker? _updateChecker;
+    private ThemeManager? _themeManager;
     private bool _crashReporterInstalled;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -61,6 +63,8 @@ public partial class App : Application
         paths.EnsureCreated();
         _settingsStore = new SettingsStore(paths.SettingsFile);
         _settings = _settingsStore.Load();
+        _themeManager = new ThemeManager(this);
+        _updateChecker = new UpdateChecker(version);
 
         AppLog.Write($"toast compatibility assembly: {ToastCompatibilityProbe.AssemblyVersion}");
 
@@ -106,7 +110,9 @@ public partial class App : Application
             _settingsStore,
             _usageStore,
             _companionStore,
-            _spriteStore);
+            _spriteStore,
+            _updateChecker,
+            version);
         _refreshCoordinator = new UsageRefreshCoordinator(
             _usageStore,
             _settings,
@@ -119,11 +125,22 @@ public partial class App : Application
         };
         _trayController.Start();
         _refreshCoordinator.Start();
+        if (_settings.UpdateNotificationsEnabled)
+        {
+            _ = _updateChecker.CheckAsync(_settings.SkippedUpdateVersion);
+        }
 
 #if DEBUG
         if (e.Args.Contains("--smoke-test", StringComparer.OrdinalIgnoreCase))
         {
-            _trayController.ShowFlyoutForSmokeTest();
+            if (e.Args.Contains("--settings", StringComparer.OrdinalIgnoreCase))
+            {
+                _trayController.ShowSettingsForSmokeTest();
+            }
+            else
+            {
+                _trayController.ShowFlyoutForSmokeTest();
+            }
             var smokeSeconds = int.TryParse(
                 Environment.GetEnvironmentVariable("PTB_SMOKE_SECONDS"),
                 out var configuredSmokeSeconds)
@@ -158,6 +175,8 @@ public partial class App : Application
         _companionStore?.Dispose();
         _spriteStore?.Dispose();
         _pokeApiClient?.Dispose();
+        _updateChecker?.Dispose();
+        _themeManager?.Dispose();
 
         if (_settingsStore is not null && _settings is not null)
         {

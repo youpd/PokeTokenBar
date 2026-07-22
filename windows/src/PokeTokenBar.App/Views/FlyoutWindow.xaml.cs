@@ -28,6 +28,7 @@ public partial class FlyoutWindow : Window
     private bool _bobUp;
     private int _spriteRequestId;
     private readonly HashSet<string> _dexBackfills = new(StringComparer.Ordinal);
+    private AvailableUpdate? _availableUpdate;
 
     public FlyoutWindow() : this(null, null)
     {
@@ -58,9 +59,21 @@ public partial class FlyoutWindow : Window
 
     public Func<Task>? ClaudeLimitsRefreshRequested { get; set; }
 
+    public Action? ApplyUpdateRequested { get; set; }
+
+    public Action? SkipUpdateRequested { get; set; }
+
+    public void UpdateAvailableUpdate(AvailableUpdate? update)
+    {
+        _availableUpdate = update;
+        ApplyLanguage();
+    }
+
     public void UpdateDisplay(UsageStore store)
     {
         _lastStore = store;
+        ApplyLanguage();
+        var text = Text;
         TodayTokensText.Text = store.LastUpdated is null
             ? "—"
             : TokenFormatter.Grouped(store.TodayTotalTokens);
@@ -86,27 +99,62 @@ public partial class FlyoutWindow : Window
 
         var block = selected?.ActiveBlock;
         BlockTokensText.Text = block is null
-            ? "활성 블록 없음"
+            ? text.NoActiveBlock
             : TokenFormatter.Grouped(block.TotalTokens);
         BurnRateText.Text = block is null
             ? string.Empty
-            : $"{TokenFormatter.Compact((long)block.TokensPerMinute)}/분";
+            : text.PerMinute((long)block.TokensPerMinute);
 
         RefreshButton.IsEnabled = !store.IsRefreshing;
         if (!string.IsNullOrWhiteSpace(store.LastErrorDescription))
         {
             RefreshStatusText.Foreground = ErrorBrush;
-            RefreshStatusText.Text = "일부 로그를 읽지 못했습니다. 이전 값을 유지합니다.";
+            RefreshStatusText.Text = text.PartialReadError;
         }
         else if (store.LastUpdated is { } updated)
         {
             RefreshStatusText.Foreground = (Brush)FindResource("SecondaryTextBrush");
-            RefreshStatusText.Text = $"마지막 갱신 {updated.ToLocalTime():HH:mm:ss}";
+            RefreshStatusText.Text = text.Updated(updated);
         }
         else
         {
             RefreshStatusText.Foreground = (Brush)FindResource("SecondaryTextBrush");
-            RefreshStatusText.Text = "사용량 불러오는 중…";
+            RefreshStatusText.Text = text.Refreshing;
+        }
+    }
+
+    private L Text => new(_companionStore?.State.Language ?? AppLanguage.En);
+
+    private void ApplyLanguage()
+    {
+        var text = Text;
+        SubtitleText.Text = text.Subtitle;
+        HomeTab.Header = text.Home;
+        ShopTab.Header = text.Shop;
+        BagTab.Header = text.Bag;
+        CollectionTab.Header = text.Collection;
+        TodayLabel.Text = text.Today;
+        CostLabel.Text = text.Cost;
+        WeekLabel.Text = text.Week;
+        MonthLabel.Text = text.Month;
+        ProvidersLabel.Text = text.Providers;
+        InputLabel.Text = text.Input;
+        OutputLabel.Text = text.Output;
+        CacheWriteLabel.Text = text.CacheWrite;
+        CacheReadLabel.Text = text.CacheRead;
+        CurrentBlockLabel.Text = text.CurrentBlock;
+        LimitSectionTitle.Text = text.OfficialLimits;
+        ReloadClaudeLimitsButton.Content = text.Reload;
+        WalletLabel.Text = text.Wallet;
+        RefreshButton.ToolTip = text.RefreshNow;
+        UpdateBanner.Visibility = _availableUpdate is null
+            ? Visibility.Collapsed
+            : Visibility.Visible;
+        if (_availableUpdate is { } update)
+        {
+            UpdateBannerText.Text = text.UpdateAvailable(update.Version);
+            ApplyUpdateButton.Content = text.ApplyUpdate;
+            SkipUpdateButton.Content = text.SkipUpdate;
         }
     }
 
@@ -148,7 +196,7 @@ public partial class FlyoutWindow : Window
     {
         if (snapshot is null)
         {
-            SelectedProviderNameText.Text = "프로바이더 없음";
+            SelectedProviderNameText.Text = Text.NoProvider;
             SelectedProviderTodayText.Text = "—";
             SetTokenBreakdown(null);
             return;
@@ -157,8 +205,8 @@ public partial class FlyoutWindow : Window
         var today = snapshot.Today;
         SelectedProviderNameText.Text = snapshot.DisplayName;
         SelectedProviderTodayText.Text = today is null
-            ? "오늘 0"
-            : $"오늘 {TokenFormatter.Compact(today.TotalTokens)} · {TokenFormatter.Cost(today.TotalCost)}";
+            ? Text.TodayProvider(0, 0)
+            : Text.TodayProvider(today.TotalTokens, today.TotalCost);
         SetTokenBreakdown(today);
     }
 
@@ -175,8 +223,8 @@ public partial class FlyoutWindow : Window
             CompanionSpriteImage.Visibility = Visibility.Collapsed;
             CompanionEmojiText.Visibility = Visibility.Visible;
             CompanionEmojiText.Text = "🥚";
-            CompanionNameText.Text = "Token Egg";
-            CompanionMetaText.Text = $"{TokenFormatter.Compact(_companionStore.EggTokensToHatch)} tokens to hatch";
+            CompanionNameText.Text = Text.TokenEgg;
+            CompanionMetaText.Text = Text.ToHatch(_companionStore.EggTokensToHatch);
             CompanionLineText.Text = string.Empty;
         }
         else
@@ -186,7 +234,7 @@ public partial class FlyoutWindow : Window
             CompanionNameText.Text = (_companionStore.CurrentIsShiny ? "✨ " : string.Empty) +
                 _companionStore.DisplayName;
             var nature = active.Nature?.DisplayName(_companionStore.State.Language) ?? "?";
-            CompanionMetaText.Text = $"{active.Rarity} · {_companionStore.StageText} · {nature}";
+            CompanionMetaText.Text = $"{Text.Rarity(active.Rarity)} · {_companionStore.StageText} · {nature}";
             CompanionLineText.Text = string.Join(
                 "  →  ",
                 _companionStore.LineNodes.Select(node =>
@@ -198,17 +246,17 @@ public partial class FlyoutWindow : Window
         CompanionProgressText.Text = TokenFormatter.Percent(_companionStore.Progress * 100);
         CompanionStatusText.Text = _companionStore.DisplayState switch
         {
-            CompanionStateKind.Egg => "Growing inside the egg",
-            CompanionStateKind.Working => "Working with you",
-            CompanionStateKind.Focus => "Deep focus!",
-            CompanionStateKind.Tired => "Rest before the limit",
-            CompanionStateKind.Sleep => "Sleeping",
+            CompanionStateKind.Egg => Text.EggStatus,
+            CompanionStateKind.Working => Text.Working,
+            CompanionStateKind.Focus => Text.Focus,
+            CompanionStateKind.Tired => Text.Tired,
+            CompanionStateKind.Sleep => Text.Sleeping,
             CompanionStateKind.LevelUp => _companionStore.JustGraduated is { } graduated
-                ? $"{graduated} graduated!"
+                ? Text.Graduated(graduated)
                 : _companionStore.JustEvolvedTo is { } evolved
-                    ? $"Evolved into {evolved}!"
-                    : "Leveled up!",
-            _ => "Ready",
+                    ? Text.Evolved(evolved)
+                    : Text.LevelUp,
+            _ => Text.Ready,
         };
     }
 
@@ -226,8 +274,8 @@ public partial class FlyoutWindow : Window
             var button = new Button
             {
                 Content = kind.IsPassive() && _companionStore.ItemCount(kind) > 0
-                    ? "Active"
-                    : "Buy",
+                    ? Text.Active
+                    : Text.Buy,
                 IsEnabled = _companionStore.CanBuy(kind),
                 MinWidth = 64,
             };
@@ -238,8 +286,8 @@ public partial class FlyoutWindow : Window
             };
             ShopPanel.Children.Add(BuildItemCard(
                 kind,
-                ItemDisplayName(kind),
-                $"{TokenFormatter.Compact(kind.ShopPrice())} tokens",
+                Text.Item(kind),
+                Text.TokensPrice(kind.ShopPrice()),
                 button));
         }
 
@@ -248,7 +296,7 @@ public partial class FlyoutWindow : Window
         {
             BagPanel.Children.Add(new TextBlock
             {
-                Text = "Your bag is empty.",
+                Text = Text.EmptyBag,
                 Foreground = (Brush)FindResource("SecondaryTextBrush"),
                 Margin = new Thickness(4),
             });
@@ -259,12 +307,12 @@ public partial class FlyoutWindow : Window
             var button = new Button { MinWidth = 64 };
             if (item.Kind.IsPassive())
             {
-                button.Content = "Active";
+                button.Content = Text.Active;
                 button.IsEnabled = false;
             }
             else if (item.Kind == ItemKind.RareCandy)
             {
-                button.Content = "Use";
+                button.Content = Text.Use;
                 button.IsEnabled = _companionStore.CanUseRareCandy;
                 button.Click += async (_, _) =>
                 {
@@ -274,7 +322,7 @@ public partial class FlyoutWindow : Window
             }
             else
             {
-                button.Content = "Use";
+                button.Content = Text.Use;
                 button.IsEnabled = _companionStore.CanUseMint;
                 button.Click += (_, _) =>
                 {
@@ -285,7 +333,7 @@ public partial class FlyoutWindow : Window
 
             BagPanel.Children.Add(BuildItemCard(
                 item.Kind,
-                ItemDisplayName(item.Kind),
+                Text.Item(item.Kind),
                 $"×{item.Count}",
                 button));
         }
@@ -299,16 +347,16 @@ public partial class FlyoutWindow : Window
         }
 
         var entries = _companionStore.DexEntriesSorted;
-        CollectionSummaryText.Text = $"Collection {entries.Count} · " +
+        CollectionSummaryText.Text = Text.CollectionSummary(entries.Count) + " · " +
             string.Join("  ", Enum.GetValues<Rarity>()
                 .Reverse()
-                .Select(rarity => $"{rarity} {entries.Count(entry => entry.Rarity == rarity)}"));
+                .Select(rarity => $"{Text.Rarity(rarity)} {entries.Count(entry => entry.Rarity == rarity)}"));
         CollectionPanel.Children.Clear();
         if (entries.Count == 0)
         {
             CollectionPanel.Children.Add(new TextBlock
             {
-                Text = "Graduate a companion to add it here.",
+                Text = Text.EmptyDex,
                 Foreground = (Brush)FindResource("SecondaryTextBrush"),
                 Margin = new Thickness(4),
                 TextWrapping = TextWrapping.Wrap,
@@ -337,7 +385,7 @@ public partial class FlyoutWindow : Window
             });
             text.Children.Add(new TextBlock
             {
-                Text = $"{string.Join(" → ", entry.ChainOrder.Select(id => "#" + id))} · {entry.Rarity}" +
+                Text = $"{string.Join(" → ", entry.ChainOrder.Select(id => "#" + id))} · {Text.Rarity(entry.Rarity)}" +
                     (entry.Nature is { } nature
                         ? $" · {nature.DisplayName(_companionStore.State.Language)}"
                         : string.Empty),
@@ -455,13 +503,6 @@ public partial class FlyoutWindow : Window
         return image;
     }
 
-    private static string ItemDisplayName(ItemKind kind) => kind switch
-    {
-        ItemKind.RareCandy => "Rare Candy",
-        ItemKind.Mint => "Mint",
-        _ => "Shiny Charm",
-    };
-
     private void UpdateStatusBanner(UsageStore store)
     {
         var incident = store.ProviderStatuses.Values
@@ -472,7 +513,7 @@ public partial class FlyoutWindow : Window
         if (incident is not null)
         {
             var provider = incident.ProviderId == "claude_code" ? "Claude" : "Codex";
-            StatusBannerText.Text = $"{provider} 상태: {incident.Description}";
+            StatusBannerText.Text = Text.Incident(provider, incident.Description);
         }
     }
 
@@ -487,21 +528,21 @@ public partial class FlyoutWindow : Window
             LimitSectionBorder.Visibility = Visibility.Visible;
             var plan = store.ClaudeLimits?.PlanDisplay;
             LimitSectionTitle.Text = string.IsNullOrWhiteSpace(plan)
-                ? "Claude 공식 한도"
+                ? $"Claude {Text.OfficialLimits}"
                 : $"Claude · {plan}";
             if (store.ClaudeLimitsAuthExpired)
             {
-                LimitSectionMessage.Text = "Claude Code를 실행하면 인증이 자동 갱신됩니다.";
+                LimitSectionMessage.Text = Text.ClaudeAuthExpired;
                 LimitSectionMessage.Visibility = Visibility.Visible;
                 ReloadClaudeLimitsButton.Visibility = Visibility.Visible;
                 return;
             }
 
             var limits = store.ClaudeLimits;
-            AddLimitRow("5시간", limits?.FiveHour?.Utilization, limits?.FiveHour?.ResetDate);
-            AddLimitRow("주간", limits?.SevenDay?.Utilization, limits?.SevenDay?.ResetDate);
-            AddLimitRow("주간 Opus", limits?.SevenDayOpus?.Utilization, limits?.SevenDayOpus?.ResetDate);
-            AddLimitRow("주간 Sonnet", limits?.SevenDaySonnet?.Utilization, limits?.SevenDaySonnet?.ResetDate);
+            AddLimitRow(Text.FiveHours, limits?.FiveHour?.Utilization, limits?.FiveHour?.ResetDate);
+            AddLimitRow(Text.Weekly, limits?.SevenDay?.Utilization, limits?.SevenDay?.ResetDate);
+            AddLimitRow(Text.WeeklyOpus, limits?.SevenDayOpus?.Utilization, limits?.SevenDayOpus?.ResetDate);
+            AddLimitRow(Text.WeeklySonnet, limits?.SevenDaySonnet?.Utilization, limits?.SevenDaySonnet?.ResetDate);
             foreach (var entry in limits?.ScopedLimitEntries ?? [])
             {
                 AddLimitRow(
@@ -512,21 +553,21 @@ public partial class FlyoutWindow : Window
 
             if (LimitRowsPanel.Children.Count == 0)
             {
-                LimitSectionMessage.Text = "공식 한도를 불러오지 못했습니다.";
+                LimitSectionMessage.Text = Text.LimitsUnavailable;
                 LimitSectionMessage.Visibility = Visibility.Visible;
                 ReloadClaudeLimitsButton.Visibility = Visibility.Visible;
             }
             else if (store.AreClaudeLimitsStale)
             {
-                LimitSectionMessage.Text = "15분 이상 지난 한도 정보입니다.";
+                LimitSectionMessage.Text = Text.LimitsStale;
                 LimitSectionMessage.Visibility = Visibility.Visible;
             }
 
             if (store.FiveHourForecast is { } forecast)
             {
                 var forecastText = forecast.BeforeReset
-                    ? $"현재 속도면 {forecast.DepletionDate.ToLocalTime():HH:mm}에 소진 예상"
-                    : "현재 속도면 리셋 전 소진되지 않음";
+                    ? Text.ForecastAt(forecast.DepletionDate)
+                    : Text.ForecastAfterReset;
                 LimitSectionMessage.Text = forecastText;
                 LimitSectionMessage.Visibility = Visibility.Visible;
             }
@@ -537,18 +578,18 @@ public partial class FlyoutWindow : Window
         if (providerId == "codex" && store.CodexLimits is { } codex)
         {
             LimitSectionBorder.Visibility = Visibility.Visible;
-            LimitSectionTitle.Text = "Codex 공식 한도";
+            LimitSectionTitle.Text = $"Codex {Text.OfficialLimits}";
             foreach (var snapshot in codex.Snapshots.Where(snapshot => snapshot.IsVisible))
             {
                 var prefix = codex.Snapshots.Count > 1 ? snapshot.DisplayName + " " : string.Empty;
-                AddLimitRow(prefix + "기본", snapshot.Primary?.UsedPercent, snapshot.Primary?.ResetDate);
-                AddLimitRow(prefix + "보조", snapshot.Secondary?.UsedPercent, snapshot.Secondary?.ResetDate);
-                AddLimitRow(prefix + "개인", snapshot.IndividualLimit?.UsedPercent, snapshot.IndividualLimit?.ResetDate);
+                AddLimitRow(prefix + Text.Primary, snapshot.Primary?.UsedPercent, snapshot.Primary?.ResetDate);
+                AddLimitRow(prefix + Text.Secondary, snapshot.Secondary?.UsedPercent, snapshot.Secondary?.ResetDate);
+                AddLimitRow(prefix + Text.Individual, snapshot.IndividualLimit?.UsedPercent, snapshot.IndividualLimit?.ResetDate);
             }
 
             if (store.AreCodexLimitsStale)
             {
-                LimitSectionMessage.Text = "15분 이상 지난 한도 정보입니다.";
+                LimitSectionMessage.Text = Text.LimitsStale;
                 LimitSectionMessage.Visibility = Visibility.Visible;
             }
 
@@ -664,7 +705,7 @@ public partial class FlyoutWindow : Window
         }
 
         RefreshButton.IsEnabled = false;
-        RefreshStatusText.Text = "새로고침 중…";
+        RefreshStatusText.Text = Text.Refreshing;
         try
         {
             await RefreshRequested();
@@ -696,4 +737,10 @@ public partial class FlyoutWindow : Window
             ReloadClaudeLimitsButton.IsEnabled = true;
         }
     }
+
+    private void ApplyUpdateButton_OnClick(object sender, RoutedEventArgs e) =>
+        ApplyUpdateRequested?.Invoke();
+
+    private void SkipUpdateButton_OnClick(object sender, RoutedEventArgs e) =>
+        SkipUpdateRequested?.Invoke();
 }

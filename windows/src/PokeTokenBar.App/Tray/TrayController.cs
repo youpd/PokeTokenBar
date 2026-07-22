@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Diagnostics;
 using H.NotifyIcon;
 using Microsoft.Toolkit.Uwp.Notifications;
 using PokeTokenBar.App.Views;
@@ -21,6 +22,8 @@ internal sealed class TrayController : IDisposable
     private readonly UsageStore _usageStore;
     private readonly CompanionStore _companionStore;
     private readonly SpriteStore _spriteStore;
+    private readonly UpdateChecker _updateChecker;
+    private readonly string _version;
     private readonly FlyoutWindow _flyout;
     private readonly StackPanel _tooltipContent = new();
     private readonly TaskbarIcon _trayIcon;
@@ -34,6 +37,7 @@ internal sealed class TrayController : IDisposable
     private readonly DispatcherTimer _animationTimer;
     private (string Key, GeneratedIconSource Low, GeneratedIconSource High)? _spriteFrames;
     private bool _highFrame;
+    private (string Key, GeneratedIconSource Source)? _numericIcon;
     private SettingsWindow? _settingsWindow;
 
     public TrayController(
@@ -41,18 +45,22 @@ internal sealed class TrayController : IDisposable
         SettingsStore settingsStore,
         UsageStore usageStore,
         CompanionStore companionStore,
-        SpriteStore spriteStore)
+        SpriteStore spriteStore,
+        UpdateChecker updateChecker,
+        string version)
     {
         _settings = settings;
         _settingsStore = settingsStore;
         _usageStore = usageStore;
         _companionStore = companionStore;
         _spriteStore = spriteStore;
+        _updateChecker = updateChecker;
+        _version = version;
         _flyout = new FlyoutWindow(companionStore, spriteStore);
 
         _trayIcon = new TaskbarIcon
         {
-            ToolTipText = "PokeTokenBar — 알 · —",
+            ToolTipText = $"PokeTokenBar — {new L(_companionStore.State.Language).TokenEgg} · —",
             IconSource = _eggIcon,
             TrayToolTip = BuildCustomTooltip(),
             ContextMenu = BuildContextMenu(),
@@ -63,9 +71,12 @@ internal sealed class TrayController : IDisposable
         _usageStore.LimitAlertsRaised += UsageStore_OnLimitAlertsRaised;
         _companionStore.Changed += CompanionStore_OnChanged;
         _companionStore.CompanionEventRaised += CompanionStore_OnEvent;
+        _updateChecker.Changed += UpdateChecker_OnChanged;
         _flyout.RefreshRequested = RequestRefreshAsync;
         _flyout.ClaudeLimitsRefreshRequested = () =>
             _usageStore.RefreshClaudeLimitsFromCredentialAsync();
+        _flyout.ApplyUpdateRequested = OpenAvailableUpdate;
+        _flyout.SkipUpdateRequested = SkipAvailableUpdate;
         _animationTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
         _animationTimer.Tick += (_, _) =>
         {
@@ -92,6 +103,8 @@ internal sealed class TrayController : IDisposable
     {
         ShowFlyout(keepOpenWhenDeactivated: true);
     }
+
+    internal void ShowSettingsForSmokeTest() => ShowSettings();
 #endif
 
     public void Dispose()
@@ -100,6 +113,7 @@ internal sealed class TrayController : IDisposable
         _usageStore.LimitAlertsRaised -= UsageStore_OnLimitAlertsRaised;
         _companionStore.Changed -= CompanionStore_OnChanged;
         _companionStore.CompanionEventRaised -= CompanionStore_OnEvent;
+        _updateChecker.Changed -= UpdateChecker_OnChanged;
         _animationTimer.Stop();
         _flyout.CloseForShutdown();
         _settingsWindow?.Close();
@@ -108,23 +122,24 @@ internal sealed class TrayController : IDisposable
 
     private ContextMenu BuildContextMenu()
     {
+        var text = new L(_companionStore.State.Language);
         var menu = new ContextMenu();
 
-        var openItem = new MenuItem { Header = "열기" };
+        var openItem = new MenuItem { Header = text.Open };
         openItem.Click += (_, _) => ShowFlyout();
         menu.Items.Add(openItem);
 
-        var refreshItem = new MenuItem { Header = "지금 새로고침" };
+        var refreshItem = new MenuItem { Header = text.RefreshNow };
         refreshItem.Click += async (_, _) => await RequestRefreshAsync();
         menu.Items.Add(refreshItem);
 
-        var settingsItem = new MenuItem { Header = "설정" };
+        var settingsItem = new MenuItem { Header = text.Settings };
         settingsItem.Click += (_, _) => ShowSettings();
         menu.Items.Add(settingsItem);
 
         menu.Items.Add(new Separator());
 
-        var exitItem = new MenuItem { Header = "종료" };
+        var exitItem = new MenuItem { Header = text.Quit };
         exitItem.Click += (_, _) => Application.Current.Shutdown();
         menu.Items.Add(exitItem);
 
@@ -162,10 +177,18 @@ internal sealed class TrayController : IDisposable
         _settingsWindow = new SettingsWindow(
             _settings,
             _settingsStore,
+            _companionStore,
+            _updateChecker,
+            _version,
             () => _usageStore.RefreshClaudeLimitsFromCredentialAsync());
         _settingsWindow.Saved += (_, _) =>
         {
+            _trayIcon.ContextMenu = BuildContextMenu();
             UpdatePresentation();
+            if (_settings.UpdateNotificationsEnabled)
+            {
+                _ = _updateChecker.CheckAsync(_settings.SkippedUpdateVersion, TimeSpan.Zero);
+            }
             SettingsChanged?.Invoke(this, EventArgs.Empty);
         };
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
@@ -230,6 +253,51 @@ internal sealed class TrayController : IDisposable
         }
     }
 
+    private void UpdateChecker_OnChanged(object? sender, EventArgs e)
+    {
+        var dispatcher = Application.Current.Dispatcher;
+        if (dispatcher.CheckAccess())
+        {
+            UpdateUpdateBanner();
+        }
+        else
+        {
+            dispatcher.BeginInvoke(UpdateUpdateBanner);
+        }
+    }
+
+    private void UpdateUpdateBanner() => _flyout.UpdateAvailableUpdate(
+        _settings.UpdateNotificationsEnabled ? _updateChecker.Available : null);
+
+    private void OpenAvailableUpdate()
+    {
+        if (_updateChecker.Available is not { } update ||
+            !UpdateChecker.IsValidGitHubPage(update.PageUri.AbsoluteUri))
+        {
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(update.PageUri.AbsoluteUri)
+            {
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write($"open update page failed: {exception.Message}");
+        }
+    }
+
+    private void SkipAvailableUpdate()
+    {
+        if (_updateChecker.Available is not { } update) return;
+        _settings.SkippedUpdateVersion = update.Version;
+        _settingsStore.Save(_settings);
+        _updateChecker.ClearAvailable();
+    }
+
     private void CompanionStore_OnEvent(CompanionEvent companionEvent)
     {
         if (!_settings.CompanionNotifications || !AppEnv.IsRealApp)
@@ -251,15 +319,16 @@ internal sealed class TrayController : IDisposable
         }
     }
 
-    private static void UsageStore_OnLimitAlertsRaised(IReadOnlyList<LimitAlert> alerts)
+    private void UsageStore_OnLimitAlertsRaised(IReadOnlyList<LimitAlert> alerts)
     {
+        var text = new L(_companionStore.State.Language);
         foreach (var alert in alerts)
         {
             try
             {
                 new ToastContentBuilder()
                     .AddArgument("limit", alert.Key)
-                    .AddText(alert.IsCritical ? "한도 위험" : "한도 경고")
+                    .AddText(alert.IsCritical ? text.LimitCritical : text.LimitWarning)
                     .AddText($"{alert.Name} {TokenFormatter.Percent(alert.Utilization)}")
                     .Show(toast => toast.Tag = alert.Key + (alert.IsCritical ? "-critical" : "-warning"));
             }
@@ -272,7 +341,9 @@ internal sealed class TrayController : IDisposable
 
     private void UpdatePresentation()
     {
-        var companionName = _companionStore.IsEgg ? "알" : _companionStore.DisplayName;
+        var companionName = _companionStore.IsEgg
+            ? new L(_companionStore.State.Language).TokenEgg
+            : _companionStore.DisplayName;
         var header = $"PokeTokenBar — {companionName}";
         var lines = TrayText.TooltipLines(
             header,
@@ -300,11 +371,37 @@ internal sealed class TrayController : IDisposable
         }
 
         _flyout.UpdateDisplay(_usageStore);
+        UpdateUpdateBanner();
         _ = UpdateTrayIconAsync();
     }
 
     private async Task UpdateTrayIconAsync()
     {
+        if (!string.IsNullOrWhiteSpace(_settings.NumericTrayIcon))
+        {
+            _spriteFrames = null;
+            var value = NumericIconText(_settings.NumericTrayIcon);
+            var numericKey = $"{_settings.NumericTrayIcon}:{value}";
+            if (_numericIcon is not { } cached || cached.Key != numericKey)
+            {
+                cached = (numericKey, new GeneratedIconSource
+                {
+                    Text = value,
+                    FontFamily = new FontFamily("Segoe UI"),
+                    FontSize = value.Length >= 5 ? 19 : value.Length >= 3 ? 24 : 30,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    Background = new SolidColorBrush(Color.FromRgb(31, 72, 52)),
+                    Margin = new Thickness(1),
+                });
+                _numericIcon = cached;
+            }
+
+            _trayIcon.IconSource = cached.Source;
+            return;
+        }
+
+        _numericIcon = null;
         if (_companionStore.CurrentSpeciesID is not { } speciesId)
         {
             _spriteFrames = null;
@@ -355,4 +452,13 @@ internal sealed class TrayController : IDisposable
         _spriteFrames = (key, low, high);
         _trayIcon.IconSource = low;
     }
+
+    private string NumericIconText(string kind) => kind switch
+    {
+        "cost" => TokenFormatter.CostCompact(_usageStore.TodayCostTotal),
+        "limit" => _usageStore.MenuLimitLine is { } line
+            ? line.Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault(value => value.EndsWith('%')) ?? "—"
+            : "—",
+        _ => TokenFormatter.Compact(_usageStore.TodayTotalTokens),
+    };
 }

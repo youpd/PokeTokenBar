@@ -15,7 +15,7 @@
     <Border
         Margin="8"
         Padding="16"
-        Background="{StaticResource WindowBackgroundBrush}"
+        Background="{DynamicResource WindowBackgroundBrush}"
         BorderBrush="#33404A5A"
         BorderThickness="1"
         CornerRadius="16">
@@ -34,7 +34,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel>
                     <TextBlock FontSize="18" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="PokeTokenBar" />
-                    <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="AI usage companion" />
+                    <TextBlock x:Name="SubtitleText" Foreground="{DynamicResource SecondaryTextBrush}" Text="AI usage companion" />
                 </StackPanel>
                 <Button
                     x:Name="RefreshButton"
@@ -45,8 +45,25 @@
                     BorderBrush="#FF4B5565"
                     Click="RefreshButton_OnClick"
                     FontSize="18"
-                    Foreground="{StaticResource PrimaryTextBrush}"
+                    Foreground="{DynamicResource PrimaryTextBrush}"
                     ToolTip="지금 새로고침">
+                    <Button.Template>
+                        <ControlTemplate TargetType="Button">
+                            <Border
+                                x:Name="RefreshBorder"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="1"
+                                CornerRadius="7">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="RefreshBorder" Property="Background" Value="#FF355F4A" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </Button.Template>
                     <TextBlock FontFamily="Segoe UI Symbol" Text="↻" />
                 </Button>
             </Grid>
@@ -82,9 +99,17 @@
                         </Setter>
                     </Style>
                 </TabControl.Resources>
-                <TabItem Header="Home">
+                <TabItem x:Name="HomeTab" Header="Home">
                     <ScrollViewer Margin="0,10,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
+                            <Border x:Name="UpdateBanner" Margin="0,0,0,10" Padding="10" Background="#44355F4A" BorderBrush="#FF4D9B70" BorderThickness="1" CornerRadius="9" Visibility="Collapsed">
+                                <Grid>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="UpdateBannerText" VerticalAlignment="Center" Foreground="{DynamicResource PrimaryTextBrush}" TextWrapping="Wrap" />
+                                    <Button x:Name="ApplyUpdateButton" Grid.Column="1" Margin="8,0,0,0" Padding="8,3" Click="ApplyUpdateButton_OnClick" Content="Update" />
+                                    <Button x:Name="SkipUpdateButton" Grid.Column="2" Margin="5,0,0,0" Padding="8,3" Click="SkipUpdateButton_OnClick" Content="Skip" />
+                                </Grid>
+                            </Border>
                             <Border Padding="14" Background="#FF202832" CornerRadius="12">
                                 <Grid>
                                     <Grid.ColumnDefinitions>
@@ -128,11 +153,11 @@
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                     <StackPanel>
-                                        <TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="오늘" />
+                                        <TextBlock x:Name="TodayLabel" Foreground="{DynamicResource SecondaryTextBrush}" Text="오늘" />
                                         <TextBlock x:Name="TodayTokensText" Margin="0,3,0,0" FontSize="25" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" VerticalAlignment="Bottom">
-                                        <TextBlock HorizontalAlignment="Right" Foreground="{StaticResource SecondaryTextBrush}" Text="예상 비용" />
+                                        <TextBlock x:Name="CostLabel" HorizontalAlignment="Right" Foreground="{DynamicResource SecondaryTextBrush}" Text="예상 비용" />
                                         <TextBlock x:Name="TodayCostText" Margin="0,3,0,2" HorizontalAlignment="Right" Foreground="{StaticResource AccentBrush}" Text="—" />
                                     </StackPanel>
                                 </Grid>
@@ -141,15 +166,15 @@
                             <Grid Margin="0,10,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="8" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
                                 <Border Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
-                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 주" /><TextBlock x:Name="WeekTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                    <StackPanel><TextBlock x:Name="WeekLabel" Foreground="{DynamicResource SecondaryTextBrush}" Text="이번 주" /><TextBlock x:Name="WeekTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
                                 </Border>
                                 <Border Grid.Column="2" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
-                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="이번 달" /><TextBlock x:Name="MonthTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                    <StackPanel><TextBlock x:Name="MonthLabel" Foreground="{DynamicResource SecondaryTextBrush}" Text="이번 달" /><TextBlock x:Name="MonthTokensText" Margin="0,4,0,0" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
                                 </Border>
                             </Grid>
 
                             <StackPanel x:Name="ProviderChipsContainer" Margin="0,10,0,0" Visibility="Collapsed">
-                                <TextBlock Margin="2,0,0,5" Foreground="{StaticResource SecondaryTextBrush}" Text="프로바이더" />
+                                <TextBlock x:Name="ProvidersLabel" Margin="2,0,0,5" Foreground="{DynamicResource SecondaryTextBrush}" Text="프로바이더" />
                                 <WrapPanel x:Name="ProviderChipsPanel" />
                             </StackPanel>
 
@@ -161,10 +186,10 @@
                                         <TextBlock x:Name="SelectedProviderTodayText" Grid.Column="1" Foreground="{StaticResource AccentBrush}" Text="—" />
                                     </Grid>
                                     <UniformGrid Margin="0,10,0,0" Columns="4">
-                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="입력" /><TextBlock x:Name="InputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
-                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="출력" /><TextBlock x:Name="OutputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
-                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="캐시 생성" /><TextBlock x:Name="CacheWriteTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
-                                        <StackPanel><TextBlock HorizontalAlignment="Center" Foreground="{StaticResource SecondaryTextBrush}" Text="캐시 읽기" /><TextBlock x:Name="CacheReadTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock x:Name="InputLabel" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Text="입력" /><TextBlock x:Name="InputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock x:Name="OutputLabel" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Text="출력" /><TextBlock x:Name="OutputTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock x:Name="CacheWriteLabel" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Text="캐시 생성" /><TextBlock x:Name="CacheWriteTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                        <StackPanel><TextBlock x:Name="CacheReadLabel" HorizontalAlignment="Center" Foreground="{DynamicResource SecondaryTextBrush}" Text="캐시 읽기" /><TextBlock x:Name="CacheReadTokensText" HorizontalAlignment="Center" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
                                     </UniformGrid>
                                 </StackPanel>
                             </Border>
@@ -176,7 +201,7 @@
                             <Border Margin="0,10,0,0" Padding="12" Background="{StaticResource CardBackgroundBrush}" CornerRadius="10">
                                 <Grid>
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                    <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="선택 프로바이더 5시간 블록" /><TextBlock x:Name="BlockTokensText" FontWeight="SemiBold" Foreground="{StaticResource PrimaryTextBrush}" Text="—" /></StackPanel>
+                                    <StackPanel><TextBlock x:Name="CurrentBlockLabel" Foreground="{DynamicResource SecondaryTextBrush}" Text="선택 프로바이더 5시간 블록" /><TextBlock x:Name="BlockTokensText" FontWeight="SemiBold" Foreground="{DynamicResource PrimaryTextBrush}" Text="—" /></StackPanel>
                                     <TextBlock x:Name="BurnRateText" Grid.Column="1" VerticalAlignment="Bottom" Foreground="{StaticResource SecondaryTextBrush}" />
                                 </Grid>
                             </Border>
@@ -197,24 +222,24 @@
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="Shop">
+                <TabItem x:Name="ShopTab" Header="Shop">
                     <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <Border Padding="14" Background="{StaticResource CardBackgroundBrush}" CornerRadius="12">
-                                <StackPanel><TextBlock Foreground="{StaticResource SecondaryTextBrush}" Text="사용 가능한 토큰" /><TextBlock x:Name="WalletText" Margin="0,4,0,0" FontSize="24" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" Text="0" /></StackPanel>
+                                <StackPanel><TextBlock x:Name="WalletLabel" Foreground="{DynamicResource SecondaryTextBrush}" Text="사용 가능한 토큰" /><TextBlock x:Name="WalletText" Margin="0,4,0,0" FontSize="24" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" Text="0" /></StackPanel>
                             </Border>
                             <StackPanel x:Name="ShopPanel" Margin="0,10,0,0" />
                         </StackPanel>
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="Bag">
+                <TabItem x:Name="BagTab" Header="Bag">
                     <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel x:Name="BagPanel" />
                     </ScrollViewer>
                 </TabItem>
 
-                <TabItem Header="Collection">
+                <TabItem x:Name="CollectionTab" Header="Collection">
                     <ScrollViewer Margin="0,12,0,0" VerticalScrollBarVisibility="Auto">
                         <StackPanel>
                             <TextBlock x:Name="CollectionSummaryText" Margin="2,0,0,8" Foreground="{StaticResource SecondaryTextBrush}" Text="Collection 0" />

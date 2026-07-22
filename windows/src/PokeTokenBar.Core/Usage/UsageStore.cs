@@ -659,6 +659,25 @@ public sealed class UsageStore : IDisposable
                 todayCostTotal = TodayCostTotal,
                 weekTotalTokens = WeekTotalTokens,
                 monthTotalTokens = MonthTotalTokens,
+                tooltipLines = TrayText.TooltipLines(
+                    "PokeTokenBar",
+                    LastUpdated is not null,
+                    _settings?.ShowTokensInMenu ?? true,
+                    _settings?.ShowCostInMenu ?? false,
+                    _settings?.ShowLimitInMenu ?? false,
+                    TodayTotalTokens,
+                    TodayCostTotal,
+                    MenuLimitLine),
+                lastError = LastErrorDescription,
+                limits = new
+                {
+                    claude = ClaudeLimits,
+                    claudeUpdatedAt = ClaudeLimitsUpdatedAt,
+                    claudeAuthExpired = ClaudeLimitsAuthExpired,
+                    codex = CodexLimits,
+                    codexUpdatedAt = CodexLimitsUpdatedAt,
+                },
+                providerStatuses = _providerStatuses,
                 providers = _snapshots,
             };
             var json = JsonSerializer.Serialize(snapshot, SnapshotJsonOptions);
