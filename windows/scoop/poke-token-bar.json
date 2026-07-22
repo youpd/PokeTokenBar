@@ -1,0 +1,34 @@
+{
+  "version": "0.1.0",
+  "description": "AI coding usage tracker and Pokémon tray companion for Windows",
+  "homepage": "https://github.com/chattymin/PokeTokenBar",
+  "license": "MIT",
+  "architecture": {
+    "64bit": {
+      "url": "https://github.com/chattymin/PokeTokenBar/releases/download/win-v0.1.0/PokeTokenBar-win-x64.zip",
+      "hash": "2f9a5e00cc6431915123b31f9e6f98efaad09a492bb8f530d14f412b28c7b5b3"
+    }
+  },
+  "shortcuts": [
+    [
+      "PokeTokenBar.exe",
+      "PokeTokenBar"
+    ]
+  ],
+  "checkver": {
+    "url": "https://api.github.com/repos/chattymin/PokeTokenBar/releases?per_page=20",
+    "regex": "win-v([\\d.]+)"
+  },
+  "autoupdate": {
+    "architecture": {
+      "64bit": {
+        "url": "https://github.com/chattymin/PokeTokenBar/releases/download/win-v$version/PokeTokenBar-win-x64.zip",
+        "hash": {
+          "url": "https://api.github.com/repos/chattymin/PokeTokenBar/releases/tags/win-v$version",
+          "regex": "\\\"name\\\"\\s*:\\s*\\\"PokeTokenBar-win-x64\\.zip\\\"[\\s\\S]*?\\\"digest\\\"\\s*:\\s*\\\"sha256:($sha256)\\\""
+        }
+      }
+    }
+  },
+  "notes": "Unsigned builds can trigger Microsoft Defender SmartScreen; compare the release SHA-256 before running."
+}

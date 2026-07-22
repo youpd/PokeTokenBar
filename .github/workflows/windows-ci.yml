@@ -2,6 +2,8 @@ name: Windows CI
 
 on:
   push:
+    tags:
+      - "win-v*"
     paths:
       - "windows/**"
   pull_request:
@@ -19,10 +21,56 @@ jobs:
       - name: Set up .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
+          dotnet-version: "10.0.302"
 
       - name: Build
         run: dotnet build windows/PokeTokenBar.sln
 
       - name: Test
         run: dotnet test windows/PokeTokenBar.sln --no-build
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/win-v')
+    needs: build-and-test
+    runs-on: windows-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.302"
+
+      - name: Validate Windows release tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".Substring(5)
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Windows release tags must use win-vX.Y.Z"
+          }
+          [xml]$project = Get-Content windows/src/PokeTokenBar.App/PokeTokenBar.App.csproj
+          $projectVersion = $project.Project.PropertyGroup.Version
+          if ($projectVersion -ne $version) {
+            throw "Tag version $version does not match project version $projectVersion"
+          }
+          "value=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Publish and package
+        shell: pwsh
+        run: ./windows/scripts/package.ps1 -Version "${{ steps.version.outputs.value }}" -ValidateManifest
+
+      - name: Create GitHub release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            windows/artifacts/PokeTokenBar-win-x64.zip `
+            windows/artifacts/PokeTokenBar-win-x64.zip.sha256 `
+            --title "PokeTokenBar Windows v${{ steps.version.outputs.value }}" `
+            --generate-notes
