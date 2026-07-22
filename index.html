@@ -540,6 +540,8 @@
         <div class="code"><span class="tok-cmd">brew</span> install --cask chattymin/tap/poke-token-bar<button class="copy" data-copy="brew install --cask chattymin/tap/poke-token-bar" data-i18n="copy">Copy</button></div>
 
         <p class="note" data-i18n-html="inst.note">Prefer building yourself? <code>swift build</code> · <code>swift test</code> · <code>./scripts/build-app.sh</code> → <code>/Applications</code>. See the <a href="https://github.com/chattymin/PokeTokenBar#install" target="_blank" rel="noopener" style="color:var(--blue)">README</a>.</p>
+
+        <p class="note" data-i18n-html="inst.gatekeeper">Downloading directly instead? It's ad-hoc/self-signed, so on first launch right-click <code>PokeTokenBar.app</code> → <strong>Open</strong>, or run <code>xattr -dr com.apple.quarantine /Applications/PokeTokenBar.app</code>. (Homebrew does this for you.)</p>
       </div>
 
       <div class="panel reveal">
@@ -607,6 +609,7 @@
       "inst.h2": "Install in a minute", "inst.sub": "macOS 14+ (Apple Silicon or Intel). The Homebrew cask handles everything.",
       "inst.s2t": "Install PokeTokenBar", "inst.s2d": "One Homebrew command — ad-hoc/self-signed; the cask strips the quarantine attribute on install.",
       "inst.note": "Prefer building yourself? <code>swift build</code> · <code>swift test</code> · <code>./scripts/build-app.sh</code> → <code>/Applications</code>. See the <a href=\"https://github.com/chattymin/PokeTokenBar#install\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--blue)\">README</a>.",
+      "inst.gatekeeper": "Downloading directly instead? It's ad-hoc/self-signed, so on first launch right-click <code>PokeTokenBar.app</code> → <strong>Open</strong>, or run <code>xattr -dr com.apple.quarantine /Applications/PokeTokenBar.app</code>. (Homebrew does this for you.)",
       "req.head": "Requirements", "req.macos": "14+ (Apple Silicon or Intel)",
       "req.providersK": "Claude / Codex / Gemini", "req.providers": "at least one, for usage to show", "req.keychain": "optional — only for official limit %",
       "req.note": "On-device. The app reads your local Claude Code / Codex / Gemini CLI logs — it never runs claude/codex model turns. Pokémon data & sprites are fetched at runtime from PokéAPI and cached locally; nothing copyrighted is bundled.",
@@ -671,6 +674,7 @@
       "inst.h2": "1분이면 설치 끝", "inst.sub": "macOS 14 이상(Apple Silicon·Intel). 나머지는 Homebrew cask가 알아서 처리해요.",
       "inst.s2t": "PokeTokenBar 설치", "inst.s2d": "Homebrew 명령 한 줄이면 끝. ad-hoc·자체 서명 앱이라 설치할 때 격리 속성은 cask가 알아서 풀어줘요.",
       "inst.note": "직접 빌드하고 싶다면 <code>swift build</code> · <code>swift test</code> · <code>./scripts/build-app.sh</code> → <code>/Applications</code>. 자세한 내용은 <a href=\"https://github.com/chattymin/PokeTokenBar#install\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--blue)\">README</a>를 참고하세요.",
+      "inst.gatekeeper": "직접 내려받아 실행하나요? ad-hoc·자체 서명 앱이라 첫 실행 때 <code>PokeTokenBar.app</code>을 우클릭 → <strong>열기</strong>, 또는 <code>xattr -dr com.apple.quarantine /Applications/PokeTokenBar.app</code>을 실행하세요. (Homebrew는 자동 처리.)",
       "req.head": "필요 환경", "req.macos": "14 이상 (Apple Silicon·Intel)",
       "req.providersK": "Claude·Codex·Gemini", "req.providers": "하나만 있어도 사용량이 표시돼요", "req.keychain": "선택 — 공식 한도(%)를 볼 때만",
       "req.note": "모든 처리는 기기 안에서 끝나요. 앱은 로컬 Claude Code/Codex/Gemini CLI 로그를 직접 읽을 뿐, claude·codex 모델을 직접 돌리지 않아요. 포켓몬 데이터·스프라이트는 PokéAPI에서 실시간으로 받아 로컬에만 저장하고, 저작물은 번들하지 않습니다.",
@@ -735,6 +739,7 @@
       "inst.h2": "1分でインストール", "inst.sub": "macOS 14 以降（Apple Silicon・Intel）。あとは Homebrew cask におまかせ。",
       "inst.s2t": "PokeTokenBar をインストール", "inst.s2d": "Homebrew のコマンド1行で完了。ad-hoc・自己署名アプリのため、インストール時の隔離属性は cask が自動で解除します。",
       "inst.note": "自分でビルドする場合は <code>swift build</code> · <code>swift test</code> · <code>./scripts/build-app.sh</code> → <code>/Applications</code>。詳しくは <a href=\"https://github.com/chattymin/PokeTokenBar#install\" target=\"_blank\" rel=\"noopener\" style=\"color:var(--blue)\">README</a> をご覧ください。",
+      "inst.gatekeeper": "直接ダウンロードして起動する場合は？ ad-hoc・自己署名アプリのため、初回起動時に <code>PokeTokenBar.app</code> を右クリック → <strong>開く</strong>、または <code>xattr -dr com.apple.quarantine /Applications/PokeTokenBar.app</code> を実行してください。（Homebrew なら自動。）",
       "req.head": "動作環境", "req.macos": "14 以降（Apple Silicon・Intel）",
       "req.providersK": "Claude・Codex・Gemini", "req.providers": "ひとつだけでも使用量を表示", "req.keychain": "任意 — 公式の上限(%)を見るときだけ",
       "req.note": "処理はすべて端末内で完結。アプリはローカルの Claude Code / Codex / Gemini CLI ログを直接読み取るだけで、claude・codex のモデルは実行しません。ポケモンのデータ・スプライトは PokéAPI からリアルタイムに取得してローカルにのみ保存し、著作物はバンドルしません。",
