@@ -4,7 +4,7 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PokeTokenBar 설정"
     Width="380"
-    Height="310"
+    Height="390"
     Background="{StaticResource WindowBackgroundBrush}"
     ResizeMode="NoResize"
     ShowInTaskbar="False"
@@ -12,6 +12,7 @@
     WindowStartupLocation="CenterScreen">
     <Grid Margin="24">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -23,13 +24,13 @@
             FontSize="20"
             FontWeight="SemiBold"
             Foreground="{StaticResource PrimaryTextBrush}"
-            Text="설정 골격" />
+            Text="사용량 설정" />
 
         <TextBlock
             Grid.Row="1"
             Margin="0,8,0,18"
             Foreground="{StaticResource SecondaryTextBrush}"
-            Text="전체 설정 화면은 M5에서 완성됩니다. M0에서는 저장/복원을 검증합니다."
+            Text="Claude Code 로컬 로그의 표시 항목과 자동 새로고침 간격을 선택합니다."
             TextWrapping="Wrap" />
 
         <StackPanel Grid.Row="2">
@@ -49,8 +50,22 @@
                 Content="툴팁에 한도 표시" />
         </StackPanel>
 
+        <StackPanel Grid.Row="3" Margin="0,20,0,0">
+            <TextBlock
+                Margin="0,0,0,7"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Text="자동 새로고침" />
+            <ComboBox x:Name="RefreshIntervalComboBox" Width="150" HorizontalAlignment="Left">
+                <ComboBoxItem Tag="0">수동</ComboBoxItem>
+                <ComboBoxItem Tag="60">1분</ComboBoxItem>
+                <ComboBoxItem Tag="120">2분</ComboBoxItem>
+                <ComboBoxItem Tag="300">5분</ComboBoxItem>
+                <ComboBoxItem Tag="900">15분</ComboBoxItem>
+            </ComboBox>
+        </StackPanel>
+
         <StackPanel
-            Grid.Row="4"
+            Grid.Row="5"
             HorizontalAlignment="Right"
             Orientation="Horizontal">
             <Button
