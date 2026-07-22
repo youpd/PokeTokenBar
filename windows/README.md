@@ -23,7 +23,7 @@ beside every release archive.
 After the corresponding GitHub release is published, install the checked-in manifest directly:
 
 ```powershell
-scoop install https://raw.githubusercontent.com/chattymin/PokeTokenBar/main/windows/scoop/poke-token-bar.json
+scoop install https://raw.githubusercontent.com/youpd/PokeTokenBar/main/windows/scoop/poke-token-bar.json
 ```
 
 ## What the app reads
@@ -70,4 +70,3 @@ The original source code is MIT licensed; see the root `LICENSE` and
 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md). PokeTokenBar is an unofficial, non-commercial fan
 project and is not affiliated with Nintendo, Game Freak, Creatures Inc., or The Pokémon Company.
 No Pokémon assets are included in this repository or its release archives.
-

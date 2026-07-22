@@ -12,12 +12,12 @@ public sealed class UpdateCheckerTests
     {
         var json = """
             [
-              {"tag_name":"v99.0.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/v99.0.0","draft":false,"prerelease":false},
-              {"tag_name":"win-v9.bad.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/win-v9.bad.0","draft":false,"prerelease":false},
+              {"tag_name":"v99.0.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/v99.0.0","draft":false,"prerelease":false},
+              {"tag_name":"win-v9.bad.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/win-v9.bad.0","draft":false,"prerelease":false},
               {"tag_name":"win-v3.0.0","html_url":"https://evil.example/release","draft":false,"prerelease":false},
-              {"tag_name":"win-v2.0.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/win-v2.0.0","draft":false,"prerelease":true},
-              {"tag_name":"win-v1.10.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/win-v1.10.0","draft":false,"prerelease":false},
-              {"tag_name":"win-v1.2.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/win-v1.2.0","draft":false,"prerelease":false}
+              {"tag_name":"win-v2.0.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/win-v2.0.0","draft":false,"prerelease":true},
+              {"tag_name":"win-v1.10.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/win-v1.10.0","draft":false,"prerelease":false},
+              {"tag_name":"win-v1.2.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/win-v1.2.0","draft":false,"prerelease":false}
             ]
             """;
         using var client = new HttpClient(new JsonHandler(json));
@@ -34,7 +34,7 @@ public sealed class UpdateCheckerTests
     public async Task HonorsSkipAndMinimumInterval()
     {
         var handler = new JsonHandler("""
-            [{"tag_name":"win-v0.2.0","html_url":"https://github.com/chattymin/PokeTokenBar/releases/tag/win-v0.2.0","draft":false,"prerelease":false}]
+            [{"tag_name":"win-v0.2.0","html_url":"https://github.com/youpd/PokeTokenBar/releases/tag/win-v0.2.0","draft":false,"prerelease":false}]
             """);
         using var client = new HttpClient(handler);
         using var checker = new UpdateChecker("0.1.0", client);
@@ -60,17 +60,20 @@ public sealed class UpdateCheckerTests
         Assert.Equal(expected, UpdateChecker.IsNewer(candidate, current));
 
     [Fact]
-    public void LocalizationAndSupportMailCoverAllLanguagesAndDiagnostics()
+    public void LocalizationAndSupportIssueCoverAllLanguagesAndSafeDiagnostics()
     {
         Assert.Equal("홈", new L(AppLanguage.Ko).Home);
         Assert.Equal("Home", new L(AppLanguage.En).Home);
         Assert.Equal("ホーム", new L(AppLanguage.Ja).Home);
 
-        var mail = SupportMail.Build("0.1.0+test", "Windows Test + x64").OriginalString;
-        Assert.StartsWith("mailto:", mail, StringComparison.Ordinal);
-        Assert.Contains("0.1.0%2Btest", mail, StringComparison.Ordinal);
-        Assert.Contains("Windows%20Test%20%2B%20x64", mail, StringComparison.Ordinal);
-        Assert.Contains("app.log", mail, StringComparison.OrdinalIgnoreCase);
+        var issue = SupportIssue.Build("0.1.0+test", "Windows Test + x64");
+        Assert.Equal(Uri.UriSchemeHttps, issue.Scheme);
+        Assert.Equal("github.com", issue.Host);
+        Assert.Equal("/youpd/PokeTokenBar/issues/new", issue.AbsolutePath);
+        Assert.Contains("0.1.0%2Btest", issue.OriginalString, StringComparison.Ordinal);
+        Assert.Contains("Windows%20Test%20%2B%20x64", issue.OriginalString, StringComparison.Ordinal);
+        Assert.DoesNotContain("mailto:", issue.OriginalString, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("app.log", issue.OriginalString, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed class JsonHandler(string json) : HttpMessageHandler

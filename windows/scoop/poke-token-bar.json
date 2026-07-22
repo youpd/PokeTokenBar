@@ -1,12 +1,12 @@
 {
   "version": "0.1.0",
   "description": "AI coding usage tracker and Pokémon tray companion for Windows",
-  "homepage": "https://github.com/chattymin/PokeTokenBar",
+  "homepage": "https://github.com/youpd/PokeTokenBar",
   "license": "MIT",
   "architecture": {
     "64bit": {
-      "url": "https://github.com/chattymin/PokeTokenBar/releases/download/win-v0.1.0/PokeTokenBar-win-x64.zip",
-      "hash": "2f9a5e00cc6431915123b31f9e6f98efaad09a492bb8f530d14f412b28c7b5b3"
+      "url": "https://github.com/youpd/PokeTokenBar/releases/download/win-v0.1.0/PokeTokenBar-win-x64.zip",
+      "hash": "07f0633c1de8f86685d8ceda1f112e22f7bf1a593e0a13c188e1dd01f33bfce8"
     }
   },
   "shortcuts": [
@@ -16,15 +16,15 @@
     ]
   ],
   "checkver": {
-    "url": "https://api.github.com/repos/chattymin/PokeTokenBar/releases?per_page=20",
+    "url": "https://api.github.com/repos/youpd/PokeTokenBar/releases?per_page=20",
     "regex": "win-v([\\d.]+)"
   },
   "autoupdate": {
     "architecture": {
       "64bit": {
-        "url": "https://github.com/chattymin/PokeTokenBar/releases/download/win-v$version/PokeTokenBar-win-x64.zip",
+        "url": "https://github.com/youpd/PokeTokenBar/releases/download/win-v$version/PokeTokenBar-win-x64.zip",
         "hash": {
-          "url": "https://api.github.com/repos/chattymin/PokeTokenBar/releases/tags/win-v$version",
+          "url": "https://api.github.com/repos/youpd/PokeTokenBar/releases/tags/win-v$version",
           "regex": "\\\"name\\\"\\s*:\\s*\\\"PokeTokenBar-win-x64\\.zip\\\"[\\s\\S]*?\\\"digest\\\"\\s*:\\s*\\\"sha256:($sha256)\\\""
         }
       }

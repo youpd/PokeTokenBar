@@ -82,7 +82,6 @@
                     <Button x:Name="ReportProblemButton" Margin="0,0,7,7" Click="ReportProblemButton_OnClick" Content="Report a problem" />
                     <Button x:Name="ShowLogsButton" Margin="0,0,7,7" Click="ShowLogsButton_OnClick" Content="Show logs" />
                     <Button x:Name="GitHubButton" Margin="0,0,7,7" Click="GitHubButton_OnClick" Content="GitHub" />
-                    <Button x:Name="SponsorButton" Margin="0,0,7,7" Click="SponsorButton_OnClick" Content="Sponsor" />
                 </WrapPanel>
                 <TextBlock x:Name="VersionText" Margin="0,4,0,18" Foreground="{StaticResource SecondaryTextBrush}" />
             </StackPanel>

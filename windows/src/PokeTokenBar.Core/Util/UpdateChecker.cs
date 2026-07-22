@@ -24,7 +24,7 @@ public sealed class UpdateChecker : IDisposable
         _httpClient = httpClient ?? new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         _clock = clock ?? (() => DateTimeOffset.UtcNow);
         _endpoint = endpoint ?? new Uri(
-            "https://api.github.com/repos/chattymin/PokeTokenBar/releases?per_page=20");
+            "https://api.github.com/repos/youpd/PokeTokenBar/releases?per_page=20");
     }
 
     public string CurrentVersion { get; }

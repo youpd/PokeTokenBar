@@ -168,7 +168,7 @@ public partial class SettingsWindow : Window
     }
 
     private void ReportProblemButton_OnClick(object sender, RoutedEventArgs e) =>
-        OpenUri(SupportMail.Build(_version, RuntimeInformation.OSDescription));
+        OpenUri(SupportIssue.Build(_version, RuntimeInformation.OSDescription));
 
     private void ShowLogsButton_OnClick(object sender, RoutedEventArgs e)
     {
@@ -187,10 +187,7 @@ public partial class SettingsWindow : Window
     }
 
     private void GitHubButton_OnClick(object sender, RoutedEventArgs e) =>
-        OpenUri(new Uri("https://github.com/chattymin/PokeTokenBar"));
-
-    private void SponsorButton_OnClick(object sender, RoutedEventArgs e) =>
-        OpenUri(new Uri("https://github.com/sponsors/chattymin"));
+        OpenUri(new Uri("https://github.com/youpd/PokeTokenBar"));
 
     private static void OpenUri(Uri uri)
     {
