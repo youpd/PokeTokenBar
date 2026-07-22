@@ -25,3 +25,9 @@ docs/
 
 # Agent worktrees / local state
 .claude/
+
+# Windows port (.NET) build output
+windows/**/bin/
+windows/**/obj/
+windows/**/publish/
+*.user

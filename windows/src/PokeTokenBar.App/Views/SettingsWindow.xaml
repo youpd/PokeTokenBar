@@ -1,0 +1,68 @@
+<Window
+    x:Class="PokeTokenBar.App.Views.SettingsWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="PokeTokenBar 설정"
+    Width="380"
+    Height="310"
+    Background="{StaticResource WindowBackgroundBrush}"
+    ResizeMode="NoResize"
+    ShowInTaskbar="False"
+    SizeToContent="Manual"
+    WindowStartupLocation="CenterScreen">
+    <Grid Margin="24">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            FontSize="20"
+            FontWeight="SemiBold"
+            Foreground="{StaticResource PrimaryTextBrush}"
+            Text="설정 골격" />
+
+        <TextBlock
+            Grid.Row="1"
+            Margin="0,8,0,18"
+            Foreground="{StaticResource SecondaryTextBrush}"
+            Text="전체 설정 화면은 M5에서 완성됩니다. M0에서는 저장/복원을 검증합니다."
+            TextWrapping="Wrap" />
+
+        <StackPanel Grid.Row="2">
+            <CheckBox
+                x:Name="ShowTokensCheckBox"
+                Margin="0,0,0,10"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="툴팁에 오늘 토큰 표시" />
+            <CheckBox
+                x:Name="ShowCostCheckBox"
+                Margin="0,0,0,10"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="툴팁에 오늘 비용 표시" />
+            <CheckBox
+                x:Name="ShowLimitCheckBox"
+                Foreground="{StaticResource PrimaryTextBrush}"
+                Content="툴팁에 한도 표시" />
+        </StackPanel>
+
+        <StackPanel
+            Grid.Row="4"
+            HorizontalAlignment="Right"
+            Orientation="Horizontal">
+            <Button
+                Width="80"
+                Margin="0,0,8,0"
+                Click="CancelButton_OnClick"
+                Content="취소" />
+            <Button
+                Width="80"
+                Click="SaveButton_OnClick"
+                Content="저장"
+                IsDefault="True" />
+        </StackPanel>
+    </Grid>
+</Window>

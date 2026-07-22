@@ -1,0 +1,28 @@
+name: Windows CI
+
+on:
+  push:
+    paths:
+      - "windows/**"
+  pull_request:
+    paths:
+      - "windows/**"
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Build
+        run: dotnet build windows/PokeTokenBar.sln
+
+      - name: Test
+        run: dotnet test windows/PokeTokenBar.sln --no-build
